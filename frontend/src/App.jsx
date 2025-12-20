@@ -348,11 +348,47 @@ export default function App() {
             sampleAudioRef.current.pause()
         }
 
+        // Initialize audio context if needed
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
+        }
+        const ctx = audioContextRef.current
+
+        // Resume context if suspended
+        if (ctx.state === 'suspended') {
+            ctx.resume()
+        }
+
         // Play new sample
         const audio = new Audio(sample.file)
+        audio.crossOrigin = "anonymous" // Enable CORS for audio visualization
         audio.volume = 0.8
         sampleAudioRef.current = audio
         setPlayingSample(sample.name)
+
+        // Connect to analyser for visualization
+        try {
+            const source = ctx.createMediaElementSource(audio)
+
+            // Connect to sleep analyser if active
+            if (sleepMode) {
+                // Ensure sleep analyser exists
+                if (!sleepAnalyserRef.current) {
+                    sleepAnalyserRef.current = ctx.createAnalyser()
+                    sleepAnalyserRef.current.fftSize = 512
+                    sleepAnalyserRef.current.smoothingTimeConstant = 0.85
+                }
+                source.connect(sleepAnalyserRef.current)
+                sleepAnalyserRef.current.connect(ctx.destination)
+            } else {
+                // Determine which analyser to use (main or sleep)
+                // If not in sleep mode but playing sample, we might still want viz?
+                // For now, just connect to destination to ensure sound
+                source.connect(ctx.destination)
+            }
+        } catch (err) {
+            console.error("Audio routing error:", err)
+        }
 
         audio.play().catch(e => {
             console.error("Failed to play sample:", e)
@@ -362,7 +398,7 @@ export default function App() {
         audio.onended = () => {
             setPlayingSample(null)
         }
-    }, [isPlaying, playingSample])
+    }, [isPlaying, playingSample, sleepMode])
 
     // Audio event handlers
     const handleTimeUpdate = () => {

@@ -1,0 +1,145 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2025-12-21T03:51:43.428473",
+  "total_voices": 4,
+  "voices": {
+    "american_casual_female": {
+      "id": "american_casual_female",
+      "name": "American Casual female",
+      "description": "Custom voice from American Casual female",
+      "source_file": "American Casual female.mp3",
+      "reference_clip": "/voices/american_casual_female_reference.wav",
+      "generated_at": "2025-12-21T03:50:48.887290",
+      "checksum": "ca4c8e6b",
+      "kokoro_voice": "am_adam",
+      "characteristics": {
+        "warmth": 1.0,
+        "breathiness": 1.0,
+        "clarity": 0.11,
+        "estimated_pitch_hz": 303.8,
+        "spectral_centroid": 2890.9
+      },
+      "recommended_settings": {
+        "pitch": 1.1,
+        "speed": 1.07,
+        "volume": 1.0
+      },
+      "advanced": {
+        "rms_energy": 0.0107,
+        "peak_amplitude": 0.4218,
+        "spectral_rolloff": 6246.1,
+        "spectral_bandwidth": 1084.3
+      }
+    },
+    "asian_female": {
+      "id": "asian_female",
+      "name": "ASIAN female",
+      "description": "Custom voice from ASIAN female",
+      "source_file": "ASIAN female.mp3",
+      "reference_clip": "/voices/asian_female_reference.wav",
+      "generated_at": "2025-12-21T03:50:59.177875",
+      "checksum": "503fe0b6",
+      "kokoro_voice": "am_adam",
+      "characteristics": {
+        "warmth": 1.0,
+        "breathiness": 0.08,
+        "clarity": 0.23,
+        "estimated_pitch_hz": 214.3,
+        "spectral_centroid": 1825.8
+      },
+      "recommended_settings": {
+        "pitch": 1.1,
+        "speed": 0.99,
+        "volume": 1.0
+      },
+      "advanced": {
+        "rms_energy": 0.0507,
+        "peak_amplitude": 0.954,
+        "spectral_rolloff": 4089.8,
+        "spectral_bandwidth": 1617.2
+      }
+    },
+    "formal_english_male": {
+      "id": "formal_english_male",
+      "name": "formal english male",
+      "description": "Custom voice from formal english male",
+      "source_file": "formal english male.mp3",
+      "reference_clip": "/voices/formal_english_male_reference.wav",
+      "generated_at": "2025-12-21T03:51:22.330139",
+      "checksum": "0eb1cdab",
+      "kokoro_voice": "am_adam",
+      "characteristics": {
+        "warmth": 1.0,
+        "breathiness": 0.04,
+        "clarity": 0.02,
+        "estimated_pitch_hz": 452.8,
+        "spectral_centroid": 2301.1
+      },
+      "recommended_settings": {
+        "pitch": 1.1,
+        "speed": 1.2,
+        "volume": 1.0
+      },
+      "advanced": {
+        "rms_energy": 0.0323,
+        "peak_amplitude": 0.9461,
+        "spectral_rolloff": 5613.3,
+        "spectral_bandwidth": 1203.5
+      }
+    },
+    "russian_high_class_girl": {
+      "id": "russian_high_class_girl",
+      "name": "Russian High class girl",
+      "description": "Custom voice from Russian High class girl",
+      "source_file": "Russian High class girl.mp3",
+      "reference_clip": "/voices/russian_high_class_girl_reference.wav",
+      "generated_at": "2025-12-21T03:51:43.313636",
+      "checksum": "53e23dfa",
+      "kokoro_voice": "af_nicole",
+      "characteristics": {
+        "warmth": 1.0,
+        "breathiness": 0.53,
+        "clarity": 0.08,
+        "estimated_pitch_hz": 500.0,
+        "spectral_centroid": 1474.0
+      },
+      "recommended_settings": {
+        "pitch": 1.1,
+        "speed": 1.47,
+        "volume": 1.0
+      },
+      "advanced": {
+        "rms_energy": 0.0201,
+        "peak_amplitude": 0.5536,
+        "spectral_rolloff": 3328.1,
+        "spectral_bandwidth": 1072.5
+      }
+    }
+  },
+  "voice_list": [
+    {
+      "id": "american_casual_female",
+      "name": "American Casual female",
+      "kokoro_voice": "am_adam",
+      "description": "Custom voice from American Casual female"
+    },
+    {
+      "id": "asian_female",
+      "name": "ASIAN female",
+      "kokoro_voice": "am_adam",
+      "description": "Custom voice from ASIAN female"
+    },
+    {
+      "id": "formal_english_male",
+      "name": "formal english male",
+      "kokoro_voice": "am_adam",
+      "description": "Custom voice from formal english male"
+    },
+    {
+      "id": "russian_high_class_girl",
+      "name": "Russian High class girl",
+      "kokoro_voice": "af_nicole",
+      "description": "Custom voice from Russian High class girl"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "id": "formal_english_male",
+  "name": "formal english male",
+  "description": "Custom voice from formal english male",
+  "source_file": "formal english male.mp3",
+  "reference_clip": "/voices/formal_english_male_reference.wav",
+  "generated_at": "2025-12-21T03:51:22.330139",
+  "checksum": "0eb1cdab",
+  "kokoro_voice": "am_adam",
+  "characteristics": {
+    "warmth": 1.0,
+    "breathiness": 0.04,
+    "clarity": 0.02,
+    "estimated_pitch_hz": 452.8,
+    "spectral_centroid": 2301.1
+  },
+  "recommended_settings": {
+    "pitch": 1.1,
+    "speed": 1.2,
+    "volume": 1.0
+  },
+  "advanced": {
+    "rms_energy": 0.0323,
+    "peak_amplitude": 0.9461,
+    "spectral_rolloff": 5613.3,
+    "spectral_bandwidth": 1203.5
+  }
+}

@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+temp_processing/
+processed_voices/
+*.pyc
+__pycache__/
+
+# Large audio samples (download separately)
+samples/*.mp3
+samples/*.wav
+
+# Agent directories
+.agent/
+
+# Vercel
+.vercel/

@@ -1,0 +1,28 @@
+{
+  "id": "asian_female",
+  "name": "ASIAN female",
+  "description": "Custom voice from ASIAN female",
+  "source_file": "ASIAN female.mp3",
+  "reference_clip": "/voices/asian_female_reference.wav",
+  "generated_at": "2025-12-21T03:50:59.177875",
+  "checksum": "503fe0b6",
+  "kokoro_voice": "am_adam",
+  "characteristics": {
+    "warmth": 1.0,
+    "breathiness": 0.08,
+    "clarity": 0.23,
+    "estimated_pitch_hz": 214.3,
+    "spectral_centroid": 1825.8
+  },
+  "recommended_settings": {
+    "pitch": 1.1,
+    "speed": 0.99,
+    "volume": 1.0
+  },
+  "advanced": {
+    "rms_energy": 0.0507,
+    "peak_amplitude": 0.954,
+    "spectral_rolloff": 4089.8,
+    "spectral_bandwidth": 1617.2
+  }
+}

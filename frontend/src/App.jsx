@@ -1,0 +1,1207 @@
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { extractTextFromPDF } from './lib/pdf-parser'
+import { TTSGPUEngine } from './lib/tts-gpu-engine'
+import { VOICE_LIST, loadCustomVoices, getCustomVoices, areCustomVoicesLoaded, ALL_KOKORO_VOICES, getVoiceProfile } from './lib/voice-profiles'
+import { AudioEffects, AUDIO_PRESETS } from './lib/audio-effects'
+import { previewCache } from './lib/preview-cache'
+import { fetchWikipediaArticle, isValidWikipediaUrl } from './lib/wikipedia-scraper'
+
+// Sample text for voice preview
+const PREVIEW_TEXT = "Welcome to ASMR Reader. Experience premium AI-powered whisper synthesis."
+
+export default function App() {
+    // Core state
+    const [pdfText, setPdfText] = useState('')
+    const [selectedVoice, setSelectedVoice] = useState(VOICE_LIST[0])
+    const [pitch, setPitch] = useState(1.0)
+    const [speed, setSpeed] = useState(0.85)
+
+    // Status state
+    const [modelStatus, setModelStatus] = useState('loading') // loading, ready, error
+    const [modelProgress, setModelProgress] = useState(0)
+    const [gpuBackend, setGpuBackend] = useState(null)
+    const [isGenerating, setIsGenerating] = useState(false)
+    const [generateProgress, setGenerateProgress] = useState(0)
+
+    // Audio state
+    const [isPlaying, setIsPlaying] = useState(false)
+    const [progress, setProgress] = useState(0)
+    const [currentTime, setCurrentTime] = useState('0:00')
+    const [duration, setDuration] = useState('0:00')
+    const [audioReady, setAudioReady] = useState(false)
+    const [audioUrl, setAudioUrl] = useState(null)
+    const [playingSample, setPlayingSample] = useState(null) // Track which sample is playing
+
+    // UI state
+    const [dragOver, setDragOver] = useState(false)
+    const [previewingVoice, setPreviewingVoice] = useState(null)
+    const [showAdvanced, setShowAdvanced] = useState(false)
+    const [selectedPreset, setSelectedPreset] = useState('default')
+    const [customVoices, setCustomVoices] = useState([])
+    const [loadingCustomVoices, setLoadingCustomVoices] = useState(false)
+    const [selectedKokoroVoice, setSelectedKokoroVoice] = useState(null)
+
+    // Sleep mode state
+    const [sleepMode, setSleepMode] = useState(false)
+    const [sleepModeActivating, setSleepModeActivating] = useState(false)
+    const [sleepModeVolume, setSleepModeVolume] = useState(0.5)
+
+    // Wikipedia state
+    const [wikipediaUrl, setWikipediaUrl] = useState('')
+    const [isFetchingWikipedia, setIsFetchingWikipedia] = useState(false)
+    const [wikipediaError, setWikipediaError] = useState('')
+
+    // Producer controls state
+    const [eqSettings, setEqSettings] = useState({
+        sub: 0, bass: 0, lowMid: 0, mid: 0, highMid: 0, presence: 0, brilliance: 0
+    })
+    const [compSettings, setCompSettings] = useState({
+        threshold: -24, ratio: 4, attack: 3, release: 250
+    })
+    const [reverbMix, setReverbMix] = useState(0)
+    const [stereoWidth, setStereoWidth] = useState(1.0)
+    const [pan, setPan] = useState(0)
+    const [masterGain, setMasterGain] = useState(1.0)
+
+    // Refs
+    const fileInputRef = useRef(null)
+    const audioRef = useRef(null)
+    const canvasRef = useRef(null)
+    const ttsEngineRef = useRef(null)
+    const audioEffectsRef = useRef(null)
+    const audioContextRef = useRef(null)
+    const sourceNodeRef = useRef(null)
+    const animationRef = useRef(null)
+    const sleepCanvasRef = useRef(null)
+    const sleepAnalyserRef = useRef(null)
+    const sleepAnimationRef = useRef(null)
+    const sampleAudioRef = useRef(null) // For playing samples
+
+    // Initialize TTS Engine
+    useEffect(() => {
+        const initEngine = async () => {
+            ttsEngineRef.current = new TTSGPUEngine()
+
+            ttsEngineRef.current.onProgress = (percent, message) => {
+                setModelProgress(percent)
+            }
+
+            ttsEngineRef.current.onReady = () => {
+                setModelStatus('ready')
+                setGpuBackend(ttsEngineRef.current.backend)
+            }
+
+            ttsEngineRef.current.onError = (err) => {
+                console.error('TTS init error:', err)
+                setModelStatus('error')
+            }
+
+            try {
+                await ttsEngineRef.current.initialize()
+            } catch (err) {
+                console.error('Failed to initialize TTS:', err)
+                setModelStatus('error')
+            }
+        }
+
+        initEngine()
+
+        return () => {
+            if (animationRef.current) cancelAnimationFrame(animationRef.current)
+            if (audioContextRef.current) audioContextRef.current.close()
+        }
+    }, [])
+
+    // Initialize audio context and effects when playing
+    const initAudioEffects = useCallback(() => {
+        if (audioContextRef.current) return
+
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
+        audioEffectsRef.current = new AudioEffects(audioContextRef.current)
+        audioEffectsRef.current.initialize()
+    }, [])
+
+    // Format time helper
+    const formatTime = (seconds) => {
+        if (!seconds || isNaN(seconds)) return '0:00'
+        const mins = Math.floor(seconds / 60)
+        const secs = Math.floor(seconds % 60)
+        return `${mins}:${secs.toString().padStart(2, '0')}`
+    }
+
+    // Voice preview using GPU TTS
+    const handleVoicePreview = useCallback(async (voice, e) => {
+        e.stopPropagation()
+
+        if (previewingVoice === voice.id) {
+            if (audioRef.current) audioRef.current.pause()
+            setPreviewingVoice(null)
+            return
+        }
+
+        if (modelStatus !== 'ready') return
+
+        setPreviewingVoice(voice.id)
+
+        try {
+            const result = await ttsEngineRef.current.generatePreview(PREVIEW_TEXT, {
+                voiceId: voice.id,
+                pitch,
+                speed
+            })
+
+            if (audioRef.current && previewingVoice === voice.id) {
+                const url = URL.createObjectURL(result.blob)
+                audioRef.current.src = url
+                audioRef.current.play()
+                audioRef.current.onended = () => setPreviewingVoice(null)
+            }
+        } catch (err) {
+            console.error('Preview failed:', err)
+            setPreviewingVoice(null)
+        }
+    }, [pitch, speed, previewingVoice, modelStatus])
+
+    // Draw waveform visualization
+    const drawWaveform = useCallback(() => {
+        if (!canvasRef.current || !audioEffectsRef.current) return
+
+        const analyser = audioContextRef.current.createAnalyser()
+        analyser.fftSize = 256
+
+        const canvas = canvasRef.current
+        const ctx = canvas.getContext('2d')
+        const bufferLength = analyser.frequencyBinCount
+        const dataArray = new Uint8Array(bufferLength)
+
+        const draw = () => {
+            animationRef.current = requestAnimationFrame(draw)
+            analyser.getByteFrequencyData(dataArray)
+
+            ctx.fillStyle = 'rgba(26, 26, 37, 0.8)'
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+            const barWidth = (canvas.width / bufferLength) * 2.5
+            let x = 0
+
+            for (let i = 0; i < bufferLength; i++) {
+                const barHeight = (dataArray[i] / 255) * canvas.height * 0.8
+
+                const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight)
+                gradient.addColorStop(0, '#8b5cf6')
+                gradient.addColorStop(0.5, '#a855f7')
+                gradient.addColorStop(1, '#06b6d4')
+
+                ctx.fillStyle = gradient
+                ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight)
+
+                x += barWidth
+            }
+        }
+
+        draw()
+    }, [])
+
+    // Handle file upload
+    const handleFileUpload = useCallback(async (file) => {
+        if (!file || file.type !== 'application/pdf') {
+            alert('Please upload a PDF file')
+            return
+        }
+
+        try {
+            const text = await extractTextFromPDF(file)
+            setPdfText(text)
+            setAudioReady(false)
+            setAudioUrl(null)
+        } catch (error) {
+            console.error('PDF extraction failed:', error)
+            alert('Failed to extract text from PDF')
+        }
+    }, [])
+
+    // Drag and drop handlers
+    const handleDragOver = (e) => { e.preventDefault(); setDragOver(true) }
+    const handleDragLeave = () => setDragOver(false)
+    const handleDrop = (e) => {
+        e.preventDefault()
+        setDragOver(false)
+        handleFileUpload(e.dataTransfer.files[0])
+    }
+
+    // Wikipedia fetch handler
+    const handleWikipediaFetch = useCallback(async () => {
+        if (!wikipediaUrl.trim()) return
+
+        setIsFetchingWikipedia(true)
+        setWikipediaError('')
+
+        try {
+            const result = await fetchWikipediaArticle(wikipediaUrl)
+            setPdfText(`# ${result.title}\n\n${result.content}`)
+            setAudioReady(false)
+            setAudioUrl(null)
+            setWikipediaUrl('') // Clear input on success
+        } catch (error) {
+            console.error('Wikipedia fetch failed:', error)
+            setWikipediaError(error.message)
+        } finally {
+            setIsFetchingWikipedia(false)
+        }
+    }, [wikipediaUrl])
+
+    // Generate audio
+    const handleGenerate = useCallback(async () => {
+        if (!pdfText.trim() || modelStatus !== 'ready') return
+
+        setIsGenerating(true)
+        setGenerateProgress(0)
+
+        try {
+            // Check cache first
+            const cacheKey = { voiceId: selectedVoice.id, pitch, speed }
+            const cached = await previewCache.get(pdfText, cacheKey)
+
+            if (cached) {
+                console.log('Using cached audio')
+                const url = URL.createObjectURL(cached)
+                setAudioUrl(url)
+                if (audioRef.current) {
+                    audioRef.current.src = url
+                    audioRef.current.load()
+                }
+                setAudioReady(true)
+                setIsGenerating(false)
+                return
+            }
+
+            const result = await ttsEngineRef.current.synthesize(pdfText, {
+                voiceId: selectedVoice.id,
+                pitch,
+                speed,
+                onChunkProgress: (p) => setGenerateProgress(p * 100)
+            })
+
+            // Cache the result
+            await previewCache.set(pdfText, cacheKey, result.blob, result.duration)
+
+            const url = URL.createObjectURL(result.blob)
+            setAudioUrl(url)
+
+            if (audioRef.current) {
+                audioRef.current.src = url
+                audioRef.current.load()
+            }
+
+            setAudioReady(true)
+        } catch (error) {
+            console.error('TTS generation failed:', error)
+            alert('Audio generation failed. Please try again.')
+        } finally {
+            setIsGenerating(false)
+        }
+    }, [pdfText, selectedVoice, pitch, speed, modelStatus])
+
+    // Audio playback
+    const togglePlayback = useCallback(() => {
+        if (!audioRef.current || !audioUrl) return
+
+        // Stop any playing sample
+        if (playingSample) {
+            if (sampleAudioRef.current) {
+                sampleAudioRef.current.pause()
+                setPlayingSample(null)
+            }
+        }
+
+        if (isPlaying) {
+            audioRef.current.pause()
+        } else {
+            initAudioEffects()
+            audioRef.current.play()
+            drawWaveform()
+        }
+        setIsPlaying(!isPlaying)
+    }, [isPlaying, audioUrl, initAudioEffects, drawWaveform, playingSample])
+
+    // Sample playback handler
+    const handleSamplePlay = useCallback((sample, e) => {
+        e.stopPropagation()
+
+        // Stop main audio if playing
+        if (isPlaying && audioRef.current) {
+            audioRef.current.pause()
+            setIsPlaying(false)
+        }
+
+        // If clicking the currently playing sample, pause it
+        if (playingSample === sample.name) {
+            if (sampleAudioRef.current) {
+                sampleAudioRef.current.pause()
+                setPlayingSample(null)
+            }
+            return
+        }
+
+        // Stop any other sample
+        if (sampleAudioRef.current) {
+            sampleAudioRef.current.pause()
+        }
+
+        // Play new sample
+        const audio = new Audio(sample.file)
+        audio.volume = 0.8
+        sampleAudioRef.current = audio
+        setPlayingSample(sample.name)
+
+        audio.play().catch(e => {
+            console.error("Failed to play sample:", e)
+            setPlayingSample(null)
+        })
+
+        audio.onended = () => {
+            setPlayingSample(null)
+        }
+    }, [isPlaying, playingSample])
+
+    // Audio event handlers
+    const handleTimeUpdate = () => {
+        if (!audioRef.current) return
+        const current = audioRef.current.currentTime
+        const total = audioRef.current.duration || 0
+        setProgress((current / total) * 100)
+        setCurrentTime(formatTime(current))
+    }
+
+    const handleLoadedMetadata = () => {
+        if (!audioRef.current) return
+        setDuration(formatTime(audioRef.current.duration))
+    }
+
+    const handleEnded = () => {
+        setIsPlaying(false)
+        setProgress(0)
+        if (animationRef.current) cancelAnimationFrame(animationRef.current)
+    }
+
+    const handleProgressClick = (e) => {
+        if (!audioRef.current) return
+        const rect = e.target.getBoundingClientRect()
+        const percent = (e.clientX - rect.left) / rect.width
+        audioRef.current.currentTime = percent * audioRef.current.duration
+    }
+
+    // Apply preset
+    const applyPreset = useCallback((presetKey) => {
+        setSelectedPreset(presetKey)
+        const preset = AUDIO_PRESETS[presetKey]
+        if (preset.settings.eq) {
+            setEqSettings(prev => ({
+                ...prev,
+                ...Object.fromEntries(
+                    Object.entries(preset.settings.eq).map(([k, v]) => [k, v.gain])
+                )
+            }))
+        }
+        if (preset.settings.reverb) {
+            setReverbMix(preset.settings.reverb.mix)
+        }
+        if (audioEffectsRef.current && preset.settings) {
+            audioEffectsRef.current.loadPreset(preset.settings)
+        }
+    }, [])
+
+    // Update EQ
+    const updateEQ = useCallback((band, value) => {
+        setEqSettings(prev => ({ ...prev, [band]: value }))
+        if (audioEffectsRef.current) {
+            audioEffectsRef.current.setEQ(band, value)
+        }
+    }, [])
+
+    // Download audio
+    const handleDownload = useCallback(() => {
+        if (!audioUrl) return
+        const a = document.createElement('a')
+        a.href = audioUrl
+        a.download = `asmr-audio-${Date.now()}.wav`
+        a.click()
+    }, [audioUrl])
+
+    // Sleep mode toggle with animation
+    const toggleSleepMode = useCallback(() => {
+        if (sleepModeActivating) return
+
+        if (!sleepMode) {
+            // Entering sleep mode
+            setSleepModeActivating(true)
+            setTimeout(() => {
+                setSleepMode(true)
+                setSleepModeActivating(false)
+                // Apply sleep volume
+                if (audioRef.current) {
+                    audioRef.current.volume = sleepModeVolume
+                }
+            }, 1500) // Animation duration
+        } else {
+            // Exiting sleep mode
+            setSleepMode(false)
+            if (audioRef.current) {
+                audioRef.current.volume = 1.0
+            }
+            if (sleepAnimationRef.current) {
+                cancelAnimationFrame(sleepAnimationRef.current)
+            }
+        }
+    }, [sleepMode, sleepModeActivating, sleepModeVolume])
+
+    // Sleep mode volume control
+    const adjustSleepVolume = useCallback((delta) => {
+        setSleepModeVolume(prev => {
+            const newVol = Math.max(0, Math.min(1, prev + delta))
+            if (audioRef.current) {
+                audioRef.current.volume = newVol
+            }
+            return newVol
+        })
+    }, [])
+
+    // Sleep mode waveform visualization
+    const drawSleepWaveform = useCallback(() => {
+        if (!sleepCanvasRef.current || !audioContextRef.current || !sleepMode) return
+
+        // Create or get analyser
+        if (!sleepAnalyserRef.current) {
+            sleepAnalyserRef.current = audioContextRef.current.createAnalyser()
+            sleepAnalyserRef.current.fftSize = 512
+            sleepAnalyserRef.current.smoothingTimeConstant = 0.85
+        }
+
+        const canvas = sleepCanvasRef.current
+        const ctx = canvas.getContext('2d')
+        const analyser = sleepAnalyserRef.current
+        const bufferLength = analyser.frequencyBinCount
+        const dataArray = new Uint8Array(bufferLength)
+
+        const draw = () => {
+            if (!sleepMode) return
+            sleepAnimationRef.current = requestAnimationFrame(draw)
+            analyser.getByteFrequencyData(dataArray)
+
+            // Clear with fade effect
+            ctx.fillStyle = 'rgba(10, 10, 15, 0.15)'
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+            // Draw organic flowing waves
+            const centerY = canvas.height / 2
+            const time = Date.now() * 0.001
+
+            // Multiple wave layers for depth
+            for (let layer = 0; layer < 3; layer++) {
+                ctx.beginPath()
+                const layerOpacity = 0.3 - layer * 0.08
+
+                // Create gradient
+                const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0)
+                gradient.addColorStop(0, `rgba(139, 92, 246, ${layerOpacity})`)
+                gradient.addColorStop(0.5, `rgba(168, 85, 247, ${layerOpacity})`)
+                gradient.addColorStop(1, `rgba(6, 182, 212, ${layerOpacity})`)
+
+                ctx.strokeStyle = gradient
+                ctx.lineWidth = 3 - layer * 0.5
+                ctx.lineCap = 'round'
+
+                ctx.moveTo(0, centerY)
+
+                for (let i = 0; i < canvas.width; i++) {
+                    const dataIndex = Math.floor((i / canvas.width) * bufferLength)
+                    const amplitude = (dataArray[dataIndex] / 255) * 60 * (1 - layer * 0.2)
+
+                    // Organic wave with multiple frequencies
+                    const wave1 = Math.sin((i * 0.02) + time * (1 + layer * 0.3)) * amplitude
+                    const wave2 = Math.sin((i * 0.01) + time * 0.7) * amplitude * 0.5
+                    const wave3 = Math.sin((i * 0.005) + time * 0.3) * amplitude * 0.3
+
+                    const y = centerY + wave1 + wave2 + wave3
+                    ctx.lineTo(i, y)
+                }
+
+                ctx.stroke()
+            }
+
+            // Add glow particles
+            for (let i = 0; i < 5; i++) {
+                const x = (time * 50 + i * 120) % canvas.width
+                const dataIndex = Math.floor((x / canvas.width) * bufferLength)
+                const amplitude = (dataArray[dataIndex] / 255) * 40
+                const y = centerY + Math.sin(x * 0.02 + time) * amplitude
+
+                const particleGradient = ctx.createRadialGradient(x, y, 0, x, y, 8 + amplitude * 0.2)
+                particleGradient.addColorStop(0, 'rgba(139, 92, 246, 0.6)')
+                particleGradient.addColorStop(1, 'rgba(139, 92, 246, 0)')
+
+                ctx.fillStyle = particleGradient
+                ctx.beginPath()
+                ctx.arc(x, y, 8 + amplitude * 0.2, 0, Math.PI * 2)
+                ctx.fill()
+            }
+        }
+
+        draw()
+    }, [sleepMode])
+
+    // Start sleep visualization when entering sleep mode
+    useEffect(() => {
+        if (sleepMode && isPlaying) {
+            initAudioEffects()
+            drawSleepWaveform()
+        }
+        return () => {
+            if (sleepAnimationRef.current) {
+                cancelAnimationFrame(sleepAnimationRef.current)
+            }
+        }
+    }, [sleepMode, isPlaying, drawSleepWaveform, initAudioEffects])
+
+    // Handle Escape key to exit sleep mode
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape' && sleepMode) {
+                setSleepMode(false)
+                if (audioRef.current) audioRef.current.volume = 1.0
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [sleepMode])
+
+    return (
+        <div className="app">
+            {/* Header */}
+            <header className="header">
+                <div className="logo">
+                    <div className="logo-icon">🎧</div>
+                    <span className="logo-text">ASMR Reader</span>
+                </div>
+                <div className="header-status">
+                    {gpuBackend && (
+                        <div className="gpu-badge">
+                            <span className="gpu-icon">⚡</span>
+                            {gpuBackend === 'webgpu' ? 'GPU Accelerated' : 'WASM'}
+                        </div>
+                    )}
+                    <div className={`status-badge ${modelStatus}`}>
+                        <span className="status-dot"></span>
+                        {modelStatus === 'loading' && `Loading AI ${Math.min(100, Math.round(modelProgress))}%`}
+                        {modelStatus === 'ready' && (gpuBackend === 'webspeech' ? 'Web Speech' : 'AI Ready')}
+                        {modelStatus === 'error' && 'Using Fallback'}
+                    </div>
+                </div>
+            </header>
+
+            {/* Non-blocking loading banner */}
+            {modelStatus === 'loading' && modelProgress < 100 && (
+                <div className="loading-banner">
+                    <span>🧠 Loading Kokoro AI model in background ({modelProgress}%)... Using Web Speech for now.</span>
+                    <div className="mini-progress">
+                        <div className="mini-fill" style={{ width: `${modelProgress}%` }}></div>
+                    </div>
+                </div>
+            )}
+
+            {/* Main Content */}
+            <main className="main-content">
+                {/* Left Panel - PDF & Text */}
+                <div className="left-panel">
+                    {!pdfText ? (
+                        <div className="welcome-section fade-in">
+                            {/* Hero Section */}
+                            <div className="welcome-hero glass-card">
+                                <h1 className="hero-title">🎧 ASMR Reader</h1>
+                                <p className="hero-subtitle">
+                                    Premium AI-powered whisper synthesis for your documents
+                                </p>
+                                <div className="hero-features">
+                                    <span className="feature-badge">🧠 Neural TTS</span>
+                                    <span className="feature-badge">⚡ GPU Accelerated</span>
+                                    <span className="feature-badge">🎤 28+ Voices</span>
+                                </div>
+                            </div>
+
+                            {/* Voice Demos */}
+                            <div className="voice-demos glass-card">
+                                <h3 className="demos-title">🎵 Listen to Voice Samples</h3>
+                                <p className="demos-subtitle">Pre-generated audio samples - instant playback!</p>
+                                <div className="demos-grid">
+                                    {[
+                                        { name: 'Asian Female', file: '/voices/asian_female_reference.wav', emoji: '🌸' },
+                                        { name: 'American Casual', file: '/voices/american_casual_female_reference.wav', emoji: '🎧' },
+                                        { name: 'Russian Elegance', file: '/voices/russian_high_class_girl_reference.wav', emoji: '❄️' },
+                                        { name: 'Formal Male', file: '/voices/formal_english_male_reference.wav', emoji: '🎙️' }
+                                    ].map((demo) => (
+                                        <div key={demo.name} className="demo-item-container">
+                                            <div className="squishy-toggle small">
+                                                <input
+                                                    type="checkbox"
+                                                    id={`demo-${demo.name}`}
+                                                    checked={playingSample === demo.name}
+                                                    onChange={(e) => handleSamplePlay(demo, e)}
+                                                />
+                                                <label htmlFor={`demo-${demo.name}`} className="squishy-button">
+                                                    <span className="squishy-label">
+                                                        {playingSample === demo.name ? '⏸' : '▶'}
+                                                    </span>
+                                                </label>
+                                            </div>
+                                            <div className="demo-info">
+                                                <span className="demo-emoji">{demo.emoji}</span>
+                                                <span className="demo-name">{demo.name}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Wikipedia Input Section */}
+                            <div className="wikipedia-section glass-card">
+                                <h3 className="wikipedia-title">🌐 Read from Wikipedia</h3>
+                                <p className="wikipedia-subtitle">Enter a Wikipedia article URL to create an ASMR read</p>
+                                <div className="wikipedia-input-row">
+                                    <input
+                                        type="url"
+                                        className="wikipedia-input"
+                                        placeholder="https://en.wikipedia.org/wiki/ASMR"
+                                        value={wikipediaUrl}
+                                        onChange={(e) => {
+                                            setWikipediaUrl(e.target.value)
+                                            setWikipediaError('')
+                                        }}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleWikipediaFetch()}
+                                        disabled={isFetchingWikipedia}
+                                    />
+                                    <button
+                                        className={`fetch-button ${isFetchingWikipedia ? 'loading' : ''}`}
+                                        onClick={handleWikipediaFetch}
+                                        disabled={!wikipediaUrl.trim() || isFetchingWikipedia}
+                                    >
+                                        {isFetchingWikipedia ? (
+                                            <>
+                                                <div className="spinner-small" />
+                                                Fetching...
+                                            </>
+                                        ) : (
+                                            <>📥 Fetch Article</>
+                                        )}
+                                    </button>
+                                </div>
+                                {wikipediaError && (
+                                    <div className="wikipedia-error">⚠️ {wikipediaError}</div>
+                                )}
+                            </div>
+
+                            {/* Divider */}
+                            <div className="content-divider">
+                                <span>or</span>
+                            </div>
+
+                            {/* Upload Zone */}
+                            <div
+                                className={`upload-zone ${dragOver ? 'dragover' : ''}`}
+                                onClick={() => fileInputRef.current?.click()}
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={handleDrop}
+                            >
+                                <div className="upload-icon">📄</div>
+                                <p className="upload-text">
+                                    <strong>Drop your PDF here</strong> or click to browse
+                                </p>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".pdf"
+                                    style={{ display: 'none' }}
+                                    onChange={(e) => handleFileUpload(e.target.files[0])}
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-editor glass-card fade-in">
+                            <div className="text-editor-header">
+                                <span className="text-editor-title">📖 Extracted Text</span>
+                                <button
+                                    onClick={() => { setPdfText(''); setAudioReady(false); setAudioUrl(null) }}
+                                    className="clear-btn"
+                                >
+                                    ✕ Clear
+                                </button>
+                            </div>
+                            <textarea
+                                className="text-editor-content"
+                                value={pdfText}
+                                onChange={(e) => setPdfText(e.target.value)}
+                                placeholder="Edit your text here..."
+                            />
+                        </div>
+                    )}
+
+                    {/* Audio Player */}
+                    {audioReady && (
+                        <div className="audio-player glass-card fade-in">
+                            <div className="waveform-container">
+                                <canvas ref={canvasRef} className="waveform-canvas" />
+                            </div>
+                            <div className="player-controls">
+                                <div className="squishy-toggle small">
+                                    <input
+                                        type="checkbox"
+                                        id="main-play-toggle"
+                                        checked={isPlaying}
+                                        onChange={togglePlayback}
+                                    />
+                                    <label htmlFor="main-play-toggle" className="squishy-button">
+                                        <span className="squishy-label">{isPlaying ? '⏸' : '▶'}</span>
+                                    </label>
+                                </div>
+                                <span className="time-display">{currentTime}</span>
+                                <div className="progress-bar" onClick={handleProgressClick}>
+                                    <div className="progress-fill" style={{ width: `${progress}%` }} />
+                                </div>
+                                <span className="time-display">{duration}</span>
+                                <button className="download-btn" onClick={handleDownload} title="Download">
+                                    ⬇️
+                                </button>
+                            </div>
+                            <audio
+                                ref={audioRef}
+                                onTimeUpdate={handleTimeUpdate}
+                                onLoadedMetadata={handleLoadedMetadata}
+                                onEnded={handleEnded}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {/* Right Panel - Controls */}
+                <aside className="sidebar">
+                    {/* Voice Selection */}
+                    <div className="glass-card">
+                        <div className="section-header">
+                            <span className="section-icon">🎤</span>
+                            <h3 className="section-title">Select Voice</h3>
+                        </div>
+                        <div className="voice-selector">
+                            {VOICE_LIST.map((voice) => (
+                                <div
+                                    key={voice.id}
+                                    className={`voice-card ${selectedVoice.id === voice.id ? 'active' : ''}`}
+                                    onClick={() => setSelectedVoice(voice)}
+                                >
+                                    <div className="voice-avatar">{voice.emoji}</div>
+                                    <div className="voice-info">
+                                        <div className="voice-name">{voice.name}</div>
+                                        <div className="voice-description">{voice.description}</div>
+                                    </div>
+                                    <button
+                                        className={`voice-preview ${previewingVoice === voice.id ? 'active' : ''}`}
+                                        onClick={(e) => handleVoicePreview(voice, e)}
+                                        disabled={modelStatus !== 'ready'}
+                                        title="Preview voice"
+                                    >
+                                        {previewingVoice === voice.id ? '⏹' : '▶'}
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Basic Controls */}
+                    <div className="glass-card">
+                        <div className="section-header">
+                            <span className="section-icon">🎚️</span>
+                            <h3 className="section-title">Basic Controls</h3>
+                        </div>
+                        <div className="asmr-controls">
+                            <div className="control-group">
+                                <div className="control-label">
+                                    <span>Pitch</span>
+                                    <span className="control-value">{pitch.toFixed(2)}x</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    className="slider"
+                                    min="0.5"
+                                    max="1.5"
+                                    step="0.05"
+                                    value={pitch}
+                                    onChange={(e) => setPitch(parseFloat(e.target.value))}
+                                />
+                            </div>
+                            <div className="control-group">
+                                <div className="control-label">
+                                    <span>Speed</span>
+                                    <span className="control-value">{speed.toFixed(2)}x</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    className="slider"
+                                    min="0.5"
+                                    max="1.5"
+                                    step="0.05"
+                                    value={speed}
+                                    onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Advanced Settings Toggle */}
+                    <button
+                        className="advanced-toggle"
+                        onClick={async () => {
+                            const newState = !showAdvanced
+                            setShowAdvanced(newState)
+                            // Lazy load custom voices when opening advanced mode
+                            if (newState && !areCustomVoicesLoaded()) {
+                                setLoadingCustomVoices(true)
+                                try {
+                                    await loadCustomVoices()
+                                    setCustomVoices(getCustomVoices())
+                                } catch (e) {
+                                    console.error('Failed to load custom voices:', e)
+                                } finally {
+                                    setLoadingCustomVoices(false)
+                                }
+                            }
+                        }}
+                    >
+                        <span>🎛️ Advanced Settings</span>
+                        <span className={`toggle-arrow ${showAdvanced ? 'open' : ''}`}>▼</span>
+                    </button>
+
+                    {/* Advanced Producer Deck */}
+                    {showAdvanced && (
+                        <div className="producer-deck glass-card fade-in">
+                            {/* Custom F5-TTS Voices */}
+                            <div className="deck-section">
+                                <h4 className="deck-title">🎤 Custom Voice Embeddings</h4>
+                                {loadingCustomVoices ? (
+                                    <div className="loading-voices">
+                                        <div className="spinner-small" />
+                                        Loading custom voices...
+                                    </div>
+                                ) : customVoices.length > 0 ? (
+                                    <div className="custom-voices-grid">
+                                        {customVoices.map((voice) => (
+                                            <button
+                                                key={voice.id}
+                                                className={`custom-voice-btn ${selectedVoice.id === voice.id ? 'active' : ''}`}
+                                                onClick={() => {
+                                                    setSelectedVoice(voice)
+                                                    setSelectedKokoroVoice(voice.kokoroVoice)
+                                                }}
+                                                title={`${voice.description}\nKokoro: ${voice.kokoroVoice}`}
+                                            >
+                                                <span className="voice-emoji">{voice.emoji}</span>
+                                                <span className="voice-label">{voice.name}</span>
+                                                <span className="voice-tag">F5-TTS</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="no-custom-voices">No custom voice embeddings found</p>
+                                )}
+                            </div>
+
+                            {/* Kokoro Voice Override */}
+                            <div className="deck-section">
+                                <h4 className="deck-title">🔊 Kokoro Voice Override</h4>
+                                <select
+                                    className="kokoro-select"
+                                    value={selectedKokoroVoice || selectedVoice.kokoroVoice || ''}
+                                    onChange={(e) => setSelectedKokoroVoice(e.target.value)}
+                                >
+                                    <option value="">Use Profile Default</option>
+                                    <optgroup label="American Female">
+                                        {ALL_KOKORO_VOICES.filter(v => v.accent === 'american' && v.gender === 'female').map(v => (
+                                            <option key={v.id} value={v.id}>{v.name}</option>
+                                        ))}
+                                    </optgroup>
+                                    <optgroup label="American Male">
+                                        {ALL_KOKORO_VOICES.filter(v => v.accent === 'american' && v.gender === 'male').map(v => (
+                                            <option key={v.id} value={v.id}>{v.name}</option>
+                                        ))}
+                                    </optgroup>
+                                    <optgroup label="British Female">
+                                        {ALL_KOKORO_VOICES.filter(v => v.accent === 'british' && v.gender === 'female').map(v => (
+                                            <option key={v.id} value={v.id}>{v.name}</option>
+                                        ))}
+                                    </optgroup>
+                                    <optgroup label="British Male">
+                                        {ALL_KOKORO_VOICES.filter(v => v.accent === 'british' && v.gender === 'male').map(v => (
+                                            <option key={v.id} value={v.id}>{v.name}</option>
+                                        ))}
+                                    </optgroup>
+                                </select>
+                            </div>
+
+                            {/* Presets */}
+                            <div className="deck-section">
+                                <h4 className="deck-title">🎨 Audio Presets</h4>
+                                <div className="preset-grid">
+                                    {Object.entries(AUDIO_PRESETS).map(([key, preset]) => (
+                                        <button
+                                            key={key}
+                                            className={`preset-btn ${selectedPreset === key ? 'active' : ''}`}
+                                            onClick={() => applyPreset(key)}
+                                        >
+                                            {preset.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* 7-Band EQ */}
+                            <div className="deck-section">
+                                <h4 className="deck-title">📊 7-Band Equalizer</h4>
+                                <div className="eq-container">
+                                    {['sub', 'bass', 'lowMid', 'mid', 'highMid', 'presence', 'brilliance'].map((band, i) => (
+                                        <div key={band} className="eq-band">
+                                            <input
+                                                type="range"
+                                                className="eq-slider"
+                                                min="-12"
+                                                max="12"
+                                                step="0.5"
+                                                value={eqSettings[band]}
+                                                onChange={(e) => updateEQ(band, parseFloat(e.target.value))}
+                                                orient="vertical"
+                                            />
+                                            <span className="eq-value">{eqSettings[band] > 0 ? '+' : ''}{eqSettings[band]}dB</span>
+                                            <span className="eq-label">{['60', '150', '400', '1k', '2.5k', '5k', '10k'][i]}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Compressor */}
+                            <div className="deck-section">
+                                <h4 className="deck-title">🔊 Compressor</h4>
+                                <div className="comp-grid">
+                                    <div className="comp-control">
+                                        <label>Threshold</label>
+                                        <input
+                                            type="range"
+                                            min="-60"
+                                            max="0"
+                                            value={compSettings.threshold}
+                                            onChange={(e) => setCompSettings(p => ({ ...p, threshold: +e.target.value }))}
+                                        />
+                                        <span>{compSettings.threshold}dB</span>
+                                    </div>
+                                    <div className="comp-control">
+                                        <label>Ratio</label>
+                                        <input
+                                            type="range"
+                                            min="1"
+                                            max="20"
+                                            value={compSettings.ratio}
+                                            onChange={(e) => setCompSettings(p => ({ ...p, ratio: +e.target.value }))}
+                                        />
+                                        <span>{compSettings.ratio}:1</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Reverb & Spatial */}
+                            <div className="deck-section">
+                                <h4 className="deck-title">🌊 Reverb & Spatial</h4>
+                                <div className="spatial-grid">
+                                    <div className="spatial-control">
+                                        <label>Reverb Mix</label>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="1"
+                                            step="0.01"
+                                            value={reverbMix}
+                                            onChange={(e) => {
+                                                setReverbMix(+e.target.value)
+                                                audioEffectsRef.current?.setReverbMix(+e.target.value)
+                                            }}
+                                        />
+                                        <span>{Math.round(reverbMix * 100)}%</span>
+                                    </div>
+                                    <div className="spatial-control">
+                                        <label>Stereo Width</label>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="2"
+                                            step="0.1"
+                                            value={stereoWidth}
+                                            onChange={(e) => setStereoWidth(+e.target.value)}
+                                        />
+                                        <span>{stereoWidth.toFixed(1)}</span>
+                                    </div>
+                                    <div className="spatial-control">
+                                        <label>Pan</label>
+                                        <input
+                                            type="range"
+                                            min="-1"
+                                            max="1"
+                                            step="0.1"
+                                            value={pan}
+                                            onChange={(e) => {
+                                                setPan(+e.target.value)
+                                                audioEffectsRef.current?.setPan(+e.target.value)
+                                            }}
+                                        />
+                                        <span>{pan === 0 ? 'C' : pan < 0 ? `L${Math.abs(pan * 100).toFixed(0)}` : `R${(pan * 100).toFixed(0)}`}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Master */}
+                            <div className="deck-section">
+                                <h4 className="deck-title">🎚️ Master</h4>
+                                <div className="master-control">
+                                    <label>Output Gain</label>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="2"
+                                        step="0.05"
+                                        value={masterGain}
+                                        onChange={(e) => {
+                                            setMasterGain(+e.target.value)
+                                            audioEffectsRef.current?.setMasterGain(+e.target.value)
+                                        }}
+                                    />
+                                    <span>{(masterGain * 100).toFixed(0)}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Generate Button */}
+                    <button
+                        className={`generate-button ${isGenerating ? 'loading' : ''}`}
+                        onClick={handleGenerate}
+                        disabled={!pdfText.trim() || isGenerating || modelStatus !== 'ready'}
+                    >
+                        {isGenerating ? (
+                            <>
+                                <div className="spinner" />
+                                Generating... {generateProgress.toFixed(0)}%
+                            </>
+                        ) : (
+                            <>
+                                ✨ Generate ASMR Audio
+                            </>
+                        )}
+                    </button>
+
+                    {/* Sleep Mode Toggle Button */}
+                    {audioReady && (
+                        <button
+                            className={`sleep-mode-toggle ${sleepModeActivating ? 'activating' : ''} ${sleepMode ? 'active' : ''}`}
+                            onClick={toggleSleepMode}
+                            disabled={sleepModeActivating}
+                        >
+                            <span className="sleep-btn-text">
+                                {sleepMode ? '☀️ Exit Sleep Mode' : '🌙 Sleep Mode'}
+                            </span>
+                            <div className="sleep-btn-progress">
+                                <div className="sleep-btn-progress-fill" />
+                            </div>
+                            <svg className="sleep-btn-check" viewBox="0 0 24 24">
+                                <path className="check-path" d="M4.5 12.5l5 5L19.5 7" fill="none" stroke="currentColor" strokeWidth="2" />
+                            </svg>
+                        </button>
+                    )}
+                </aside>
+            </main>
+
+            {/* Sleep Mode Overlay */}
+            {sleepMode && (
+                <div className="sleep-mode-overlay">
+                    <div className="sleep-mode-content">
+                        {/* Exit Button */}
+                        <button className="sleep-exit-btn" onClick={() => {
+                            setSleepMode(false)
+                            if (audioRef.current) audioRef.current.volume = 1.0
+                        }}>
+                            <span>✕</span>
+                        </button>
+
+                        {/* Title */}
+                        <div className="sleep-header">
+                            <h2 className="sleep-title">🌙 Sleep Mode</h2>
+                            <p className="sleep-subtitle">Relax with ambient audio visualization</p>
+                        </div>
+
+                        {/* AI Waveform Visualization Canvas */}
+                        <div className="sleep-waveform-container">
+                            <canvas
+                                ref={sleepCanvasRef}
+                                className="sleep-waveform-canvas"
+                                width={800}
+                                height={200}
+                            />
+                        </div>
+
+                        {/* Volume Display */}
+                        <div className="sleep-volume-display">
+                            <span className="volume-label">Volume</span>
+                            <span className="volume-value">{Math.round(sleepModeVolume * 100)}%</span>
+                        </div>
+
+                        {/* Squishy Volume Controls */}
+                        <div className="sleep-controls">
+                            {/* Volume Down - Squishy Button */}
+                            <div className="squishy-toggle">
+                                <input
+                                    type="checkbox"
+                                    id="vol-down"
+                                    onChange={() => adjustSleepVolume(-0.1)}
+                                />
+                                <label htmlFor="vol-down" className="squishy-button">
+                                    <span className="squishy-label">−</span>
+                                </label>
+                            </div>
+
+                            {/* Play/Pause - Large Center Button */}
+                            <div className="squishy-toggle large">
+                                <input
+                                    type="checkbox"
+                                    id="sleep-play"
+                                    checked={isPlaying}
+                                    onChange={togglePlayback}
+                                />
+                                <label htmlFor="sleep-play" className="squishy-button">
+                                    <span className="squishy-label">{isPlaying ? '⏸' : '▶'}</span>
+                                </label>
+                            </div>
+
+                            {/* Volume Up - Squishy Button */}
+                            <div className="squishy-toggle">
+                                <input
+                                    type="checkbox"
+                                    id="vol-up"
+                                    onChange={() => adjustSleepVolume(0.1)}
+                                />
+                                <label htmlFor="vol-up" className="squishy-button">
+                                    <span className="squishy-label">+</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* Hint */}
+                        <p className="sleep-hint">Press ESC to exit</p>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}

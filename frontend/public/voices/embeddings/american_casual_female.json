@@ -1,0 +1,28 @@
+{
+  "id": "american_casual_female",
+  "name": "American Casual female",
+  "description": "Custom voice from American Casual female",
+  "source_file": "American Casual female.mp3",
+  "reference_clip": "/voices/american_casual_female_reference.wav",
+  "generated_at": "2025-12-21T03:50:48.887290",
+  "checksum": "ca4c8e6b",
+  "kokoro_voice": "am_adam",
+  "characteristics": {
+    "warmth": 1.0,
+    "breathiness": 1.0,
+    "clarity": 0.11,
+    "estimated_pitch_hz": 303.8,
+    "spectral_centroid": 2890.9
+  },
+  "recommended_settings": {
+    "pitch": 1.1,
+    "speed": 1.07,
+    "volume": 1.0
+  },
+  "advanced": {
+    "rms_energy": 0.0107,
+    "peak_amplitude": 0.4218,
+    "spectral_rolloff": 6246.1,
+    "spectral_bandwidth": 1084.3
+  }
+}

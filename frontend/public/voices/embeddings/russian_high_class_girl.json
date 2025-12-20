@@ -1,0 +1,28 @@
+{
+  "id": "russian_high_class_girl",
+  "name": "Russian High class girl",
+  "description": "Custom voice from Russian High class girl",
+  "source_file": "Russian High class girl.mp3",
+  "reference_clip": "/voices/russian_high_class_girl_reference.wav",
+  "generated_at": "2025-12-21T03:51:43.313636",
+  "checksum": "53e23dfa",
+  "kokoro_voice": "af_nicole",
+  "characteristics": {
+    "warmth": 1.0,
+    "breathiness": 0.53,
+    "clarity": 0.08,
+    "estimated_pitch_hz": 500.0,
+    "spectral_centroid": 1474.0
+  },
+  "recommended_settings": {
+    "pitch": 1.1,
+    "speed": 1.47,
+    "volume": 1.0
+  },
+  "advanced": {
+    "rms_energy": 0.0201,
+    "peak_amplitude": 0.5536,
+    "spectral_rolloff": 3328.1,
+    "spectral_bandwidth": 1072.5
+  }
+}

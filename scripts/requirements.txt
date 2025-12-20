@@ -1,0 +1,10 @@
+# Audio Processing Dependencies
+# Run: pip install -r requirements.txt
+
+torch>=2.0.0
+torchaudio>=2.0.0
+demucs
+silero-vad
+pydub
+soundfile
+numpy

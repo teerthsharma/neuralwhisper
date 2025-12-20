@@ -488,62 +488,87 @@ export default function App() {
             sleepAnimationRef.current = requestAnimationFrame(draw)
             analyser.getByteFrequencyData(dataArray)
 
-            // Clear with fade effect
-            ctx.fillStyle = 'rgba(10, 10, 15, 0.15)'
+            // Clear with slight fade for trail effect
+            ctx.fillStyle = 'rgba(5, 5, 10, 0.2)'
             ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-            // Draw organic flowing waves
-            const centerY = canvas.height / 2
-            const time = Date.now() * 0.001
+            const time = Date.now() * 0.002
 
-            // Multiple wave layers for depth
-            for (let layer = 0; layer < 3; layer++) {
+            // Calculate audio reactivity metrics
+            let bass = 0, mid = 0, high = 0
+            for (let i = 0; i < bufferLength; i++) {
+                const val = dataArray[i]
+                if (i < bufferLength * 0.1) bass += val
+                else if (i < bufferLength * 0.5) mid += val
+                else high += val
+            }
+            bass = (bass / (bufferLength * 0.1)) / 255
+            mid = (mid / (bufferLength * 0.4)) / 255
+            high = (high / (bufferLength * 0.5)) / 255
+
+            // Draw organic liquid layers
+            const drawLiquidLayer = (color, offset, speed, amplitudeMod, frequency) => {
                 ctx.beginPath()
-                const layerOpacity = 0.3 - layer * 0.08
+                ctx.fillStyle = color
 
-                // Create gradient
-                const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0)
-                gradient.addColorStop(0, `rgba(139, 92, 246, ${layerOpacity})`)
-                gradient.addColorStop(0.5, `rgba(168, 85, 247, ${layerOpacity})`)
-                gradient.addColorStop(1, `rgba(6, 182, 212, ${layerOpacity})`)
+                // Start drawing wave from left
+                ctx.moveTo(0, canvas.height)
 
-                ctx.strokeStyle = gradient
-                ctx.lineWidth = 3 - layer * 0.5
-                ctx.lineCap = 'round'
+                for (let x = 0; x <= canvas.width; x += 2) {
+                    // Normalize x
+                    const nX = x / canvas.width
 
-                ctx.moveTo(0, centerY)
+                    // Complex wave function for organic feel
+                    const wave1 = Math.sin(nX * frequency + time * speed + offset)
+                    const wave2 = Math.cos(nX * frequency * 2.5 - time * speed * 0.5) * 0.5
+                    const wave3 = Math.sin(nX * frequency * 0.5 + time * 0.2) * 0.3
 
-                for (let i = 0; i < canvas.width; i++) {
-                    const dataIndex = Math.floor((i / canvas.width) * bufferLength)
-                    const amplitude = (dataArray[dataIndex] / 255) * 60 * (1 - layer * 0.2)
+                    // Modulate height based on audio tiers
+                    const audioMod = (bass * 0.6 + mid * 0.3 + high * 0.1) * amplitudeMod
 
-                    // Organic wave with multiple frequencies
-                    const wave1 = Math.sin((i * 0.02) + time * (1 + layer * 0.3)) * amplitude
-                    const wave2 = Math.sin((i * 0.01) + time * 0.7) * amplitude * 0.5
-                    const wave3 = Math.sin((i * 0.005) + time * 0.3) * amplitude * 0.3
+                    const y = canvas.height * (0.6 - audioMod * 0.4) + // Base height rises with volume
+                        (wave1 + wave2 + wave3) * (30 + bass * 50) // Wave height varying with bass
 
-                    const y = centerY + wave1 + wave2 + wave3
-                    ctx.lineTo(i, y)
+                    ctx.lineTo(x, y)
                 }
 
-                ctx.stroke()
+                ctx.lineTo(canvas.width, canvas.height)
+                ctx.lineTo(0, canvas.height)
+                ctx.fill()
             }
 
-            // Add glow particles
-            for (let i = 0; i < 5; i++) {
-                const x = (time * 50 + i * 120) % canvas.width
-                const dataIndex = Math.floor((x / canvas.width) * bufferLength)
-                const amplitude = (dataArray[dataIndex] / 255) * 40
-                const y = centerY + Math.sin(x * 0.02 + time) * amplitude
+            // Draw 4 distinct layers for depth
+            // Deep purple base
+            drawLiquidLayer('rgba(88, 28, 135, 0.4)', 0, 1.0, 0.8, 3)
 
-                const particleGradient = ctx.createRadialGradient(x, y, 0, x, y, 8 + amplitude * 0.2)
-                particleGradient.addColorStop(0, 'rgba(139, 92, 246, 0.6)')
-                particleGradient.addColorStop(1, 'rgba(139, 92, 246, 0)')
+            // Mid violet
+            drawLiquidLayer('rgba(124, 58, 237, 0.3)', 2, 1.5, 0.9, 5)
 
-                ctx.fillStyle = particleGradient
-                ctx.beginPath()
-                ctx.arc(x, y, 8 + amplitude * 0.2, 0, Math.PI * 2)
-                ctx.fill()
+            // Bright cyan/blue highlights
+            drawLiquidLayer('rgba(6, 182, 212, 0.25)', 4, 2.0, 1.0, 7)
+
+            // White/blue glow top surface
+            ctx.shadowBlur = 20
+            ctx.shadowColor = 'rgba(139, 92, 246, 0.5)'
+            drawLiquidLayer('rgba(167, 139, 250, 0.15)', 1, 2.5, 1.1, 4)
+            ctx.shadowBlur = 0
+
+            // Floating Particles (Simulating bubbles/sparkles)
+            for (let i = 0; i < 20; i++) {
+                const pTime = time * 0.5 + i * 100
+                const x = (Math.sin(i * 123.45 + pTime * 0.5) * 0.5 + 0.5) * canvas.width
+
+                // Y position modulated by wave height at that X
+                const waveY = canvas.height * 0.6 + Math.sin(x * 0.01 + time) * 20
+                const y = waveY - (Math.tan(pTime * 0.8 + i) * 0.5 + 0.5) * 100 - (bass * 100)
+
+                if (y < canvas.height && y > 0) {
+                    const size = (Math.sin(pTime * 2 + i) * 0.5 + 0.5) * 3 + (high * 5)
+                    ctx.beginPath()
+                    ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + high * 0.7})`
+                    ctx.arc(x, y, size, 0, Math.PI * 2)
+                    ctx.fill()
+                }
             }
         }
 

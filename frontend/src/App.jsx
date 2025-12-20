@@ -1081,6 +1081,25 @@ export default function App() {
                                     <span>{(masterGain * 100).toFixed(0)}%</span>
                                 </div>
                             </div>
+
+                            {/* Sleep Mode Demo Launch */}
+                            <div className="deck-section">
+                                <h4 className="deck-title">🌙 Sleep Mode Demo</h4>
+                                <button
+                                    className="sleep-mode-toggle"
+                                    onClick={() => {
+                                        setSleepMode(true)
+                                        // Ensure volume is appropriate
+                                        if (audioRef.current) audioRef.current.volume = sleepModeVolume
+                                    }}
+                                >
+                                    <span className="sleep-btn-text">Launch Sleep Demo</span>
+                                    <div className="sleep-btn-progress"></div>
+                                </button>
+                                <p className="sleep-hint" style={{ marginTop: '0.5rem', textAlign: 'center' }}>
+                                    Experience the ambient mode without generating audio
+                                </p>
+                            </div>
                         </div>
                     )}
 
@@ -1176,11 +1195,27 @@ export default function App() {
                                 <input
                                     type="checkbox"
                                     id="sleep-play"
-                                    checked={isPlaying}
-                                    onChange={togglePlayback}
+                                    checked={isPlaying || !!playingSample}
+                                    onChange={(e) => {
+                                        if (playingSample) {
+                                            // Determine which sample object to toggle based on name
+                                            const sampleObj = [
+                                                { name: 'Asian Female', file: '/voices/asian_female_reference.wav' },
+                                                { name: 'American Casual', file: '/voices/american_casual_female_reference.wav' },
+                                                { name: 'Russian Elegance', file: '/voices/russian_high_class_girl_reference.wav' },
+                                                { name: 'Formal Male', file: '/voices/formal_english_male_reference.wav' }
+                                            ].find(s => s.name === playingSample);
+
+                                            if (sampleObj) {
+                                                handleSamplePlay(sampleObj, { stopPropagation: () => { } });
+                                            }
+                                        } else {
+                                            togglePlayback();
+                                        }
+                                    }}
                                 />
                                 <label htmlFor="sleep-play" className="squishy-button">
-                                    <span className="squishy-label">{isPlaying ? '⏸' : '▶'}</span>
+                                    <span className="squishy-label">{(isPlaying || !!playingSample) ? '⏸' : '▶'}</span>
                                 </label>
                             </div>
 
@@ -1194,6 +1229,39 @@ export default function App() {
                                 <label htmlFor="vol-up" className="squishy-button">
                                     <span className="squishy-label">+</span>
                                 </label>
+                            </div>
+                        </div>
+
+                        {/* Sleep Mode Samples List */}
+                        <div className="sleep-samples-list">
+                            <h4 className="sleep-samples-title">🎵 Ambient Voice Samples</h4>
+                            <div className="sleep-samples-grid">
+                                {[
+                                    { name: 'Asian Female', file: '/voices/asian_female_reference.wav', emoji: '🌸' },
+                                    { name: 'American Casual', file: '/voices/american_casual_female_reference.wav', emoji: '🎧' },
+                                    { name: 'Russian Elegance', file: '/voices/russian_high_class_girl_reference.wav', emoji: '❄️' },
+                                    { name: 'Formal Male', file: '/voices/formal_english_male_reference.wav', emoji: '🎙️' }
+                                ].map((demo) => (
+                                    <div key={demo.name} className="demo-item-container sleep-demo-item">
+                                        <div className="squishy-toggle small">
+                                            <input
+                                                type="checkbox"
+                                                id={`sleep-demo-${demo.name}`}
+                                                checked={playingSample === demo.name}
+                                                onChange={(e) => handleSamplePlay(demo, e)}
+                                            />
+                                            <label htmlFor={`sleep-demo-${demo.name}`} className="squishy-button">
+                                                <span className="squishy-label">
+                                                    {playingSample === demo.name ? '⏸' : '▶'}
+                                                </span>
+                                            </label>
+                                        </div>
+                                        <div className="demo-info">
+                                            <span className="demo-emoji">{demo.emoji}</span>
+                                            <span className="demo-name">{demo.name}</span>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 

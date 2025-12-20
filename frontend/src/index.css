@@ -1895,3 +1895,44 @@ h3 {
 .squishy-toggle.small .squishy-label {
   font-size: 1rem;
 }
+
+/* Sleep Mode Samples List */
+.sleep-samples-list {
+  width: 100%;
+  max-width: 600px;
+  margin-top: 1rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.sleep-samples-title {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 1rem;
+  opacity: 0.8;
+}
+
+.sleep-samples-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.sleep-demo-item {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.sleep-demo-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+@media (max-width: 600px) {
+  .sleep-samples-grid {
+    grid-template-columns: 1fr;
+  }
+}

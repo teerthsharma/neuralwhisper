@@ -932,33 +932,25 @@ export default function App() {
                         </div>
                         <div className="asmr-controls">
                             <div className="control-group">
-                                <div className="control-label">
-                                    <span>Pitch</span>
-                                    <span className="control-value">{pitch.toFixed(2)}x</span>
-                                </div>
-                                <input
-                                    type="range"
-                                    className="slider"
-                                    min="0.5"
-                                    max="1.5"
-                                    step="0.05"
+                                <LiquidSlider
+                                    label="Pitch"
+                                    min={0.5}
+                                    max={1.5}
+                                    step={0.05}
                                     value={pitch}
-                                    onChange={(e) => setPitch(parseFloat(e.target.value))}
+                                    onChange={(val) => setPitch(parseFloat(val))}
+                                    unit="x"
                                 />
                             </div>
                             <div className="control-group">
-                                <div className="control-label">
-                                    <span>Speed</span>
-                                    <span className="control-value">{speed.toFixed(2)}x</span>
-                                </div>
-                                <input
-                                    type="range"
-                                    className="slider"
-                                    min="0.5"
-                                    max="1.5"
-                                    step="0.05"
+                                <LiquidSlider
+                                    label="Speed"
+                                    min={0.5}
+                                    max={1.5}
+                                    step={0.05}
                                     value={speed}
-                                    onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                                    onChange={(val) => setSpeed(parseFloat(val))}
+                                    unit="x"
                                 />
                             </div>
                         </div>

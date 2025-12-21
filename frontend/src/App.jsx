@@ -12,7 +12,7 @@ import { WelcomeHero } from './components/welcome-hero'
 import { AudiobookShelf } from './components/audiobook-shelf'
 import { UrlInput } from './components/url-input'
 import { LiquidSlider } from './components/liquid-slider'
-import { LiquidSlider } from './components/liquid-slider'
+
 import { VoiceLabPage } from './components/voice-lab-page'
 import { brain } from './lib/asmr-brain'
 

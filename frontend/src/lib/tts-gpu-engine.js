@@ -310,19 +310,22 @@ export class TTSGPUEngine {
             this.setAudioMode(this.audioMode) // Use current global mode
         }
 
-        console.log(`[TTS] Synthesizing: "${text.slice(0, 20)}..."`, optimized)
+        // PRE-PROCESS TEXT FOR PROSODY
+        const processedText = this._preprocessText(text, this.audioMode)
+
+        console.log(`[TTS] Synthesizing: "${processedText.slice(0, 20)}..."`, optimized)
 
         // 4. Check Cache
-        const cacheKey = this._hashText(text, profile.kokoroVoice, optimized.speed, optimized.pitch)
+        const cacheKey = this._hashText(processedText, profile.kokoroVoice, optimized.speed, optimized.pitch)
         const cached = await this._getCachedAudio(cacheKey)
         if (cached) return cached
 
         // 5. Generate
         if (this.useWebSpeechFallback || !this.tts) {
-            return this._synthesizeWebSpeech(text, { ...optimized, voiceId })
+            return this._synthesizeWebSpeech(processedText, { ...optimized, voiceId })
         }
 
-        const result = await this._synthesizeKokoroOptimized(text, {
+        const result = await this._synthesizeKokoroOptimized(processedText, {
             voiceId: profile.kokoroVoice, // Use the raw Kokoro ID here
             pitch: optimized.pitch,
             speed: optimized.speed,
@@ -331,6 +334,31 @@ export class TTSGPUEngine {
 
         await this._setCachedAudio(cacheKey, result)
         return result
+    }
+
+    /**
+     * Preprocess text for better prosody based on mode
+     */
+    _preprocessText(text, mode) {
+        if (!text) return text
+
+        let processed = text
+
+        // ASMR Mode: Enhance punctuation for pacing
+        if (mode === 'asmr') {
+            console.log('[TTS] Applying ASMR Comma Expansion...')
+            // Replace commas with a pause token or ellipsis to force Kokoro to pause
+            // Kokoro treated '...' as a longer pause than ',' in testing
+            processed = processed.replace(/,/g, '... ')
+
+            // Ensure full stops have enough space for breath
+            processed = processed.replace(/\./g, '... ')
+
+            // Clean up multiple spaces
+            processed = processed.replace(/\s+/g, ' ')
+        }
+
+        return processed
     }
 
     /**

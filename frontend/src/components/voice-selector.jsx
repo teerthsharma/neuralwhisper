@@ -1,59 +1,89 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { VOICE_LIST, ALL_KOKORO_VOICES, getVoiceProfile } from '../lib/voice-profiles'
 
 export function VoiceSelector({ selectedVoiceId, onSelect, customVoices = [] }) {
     const [isOpen, setIsOpen] = useState(false)
     const [filter, setFilter] = useState('all') // all, female, male, custom
 
+    // Get current profile for the main button
     const selectedProfile = getVoiceProfile(selectedVoiceId)
 
-    // Combine standard voices with any loaded custom voices
-    const allDisplays = [
-        ...VOICE_LIST,
-        ...customVoices
-    ]
+    // Deduplicate and Sort Voices
+    const uniqueVoices = useMemo(() => {
+        const voiceMap = new Map()
 
-    const filteredVoices = allDisplays.filter(v => {
-        if (filter === 'all') return true
-        if (filter === 'custom') return v.isCustom
-        if (v.isCustom) return false // Don't show custom in gender filters to avoid confusion, or check metadata
+        // 1. Add Standard Voices first
+        VOICE_LIST.forEach(voice => {
+            voiceMap.set(voice.id, { ...voice, type: 'standard' })
+        })
 
-        // Approximate gender check
-        const kVoice = ALL_KOKORO_VOICES.find(k => k.id === v.kokoroVoice)
-        if (!kVoice) return true
-        return kVoice.gender === filter
-    })
+        // 2. Add/Override with Custom Voices
+        // If a custom voice has the same ID, it overwrites the standard one
+        customVoices.forEach(voice => {
+            voiceMap.set(voice.id, { ...voice, type: 'custom' })
+        })
+
+        // Convert back to array
+        return Array.from(voiceMap.values())
+    }, [customVoices])
+
+    // Filter Logic
+    const filteredVoices = useMemo(() => {
+        return uniqueVoices.filter(v => {
+            if (filter === 'all') return true
+            if (filter === 'custom') return v.type === 'custom'
+
+            // Gender check
+            // Use metadata gender if available, else derive from ID/Name or map to Kokoro base
+            const isFemale = v.name.toLowerCase().includes('female') ||
+                v.id.includes('female') ||
+                v.gender === 'female' ||
+                (v.kokoroVoice && v.kokoroVoice.startsWith('af_') || v.kokoroVoice.startsWith('bf_'))
+
+            if (filter === 'female') return isFemale
+            if (filter === 'male') return !isFemale // simplified assumption for non-female
+
+            return true
+        })
+    }, [uniqueVoices, filter])
 
     return (
-        <div className="voice-selector-container relative z-20">
-            {/* Main Display Button */}
+        <div className="voice-selector-container relative z-20 font-sans">
+            {/* Main Trigger Button */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full glass-card p-4 flex items-center justify-between group hover:bg-[var(--bg-glass-hover)] transition-all duration-300"
+                className="w-full glass-card p-5 flex items-center justify-between group hover:bg-white/5 transition-all duration-300 border border-white/10 hover:border-white/20 shadow-2xl backdrop-blur-xl rounded-2xl"
             >
-                <div className="flex items-center gap-4">
-                    <div className="text-4xl filter drop-shadow-lg group-hover:scale-110 transition-transform">
-                        {selectedProfile.emoji}
-                    </div>
-                    <div className="text-left">
-                        <div className="text-xs uppercase tracking-widest text-[var(--accent-primary)] font-bold mb-1">
-                            Current Voice
+                <div className="flex items-center gap-5">
+                    <div className="relative">
+                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20 flex items-center justify-center text-3xl shadow-inner border border-white/10 group-hover:scale-105 transition-transform duration-300">
+                            {selectedProfile.emoji}
                         </div>
-                        <h3 className="text-xl font-bold text-white leading-none mb-1">
+                        {selectedProfile.isCustom && (
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-gradient-to-r from-amber-300 to-orange-400 rounded-full flex items-center justify-center shadow-lg border border-black/50">
+                                <span className="text-[10px]">⭐</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="text-left flex flex-col">
+                        <span className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-1">
+                            Active Voice
+                        </span>
+                        <h3 className="text-xl font-medium text-white tracking-tight">
                             {selectedProfile.name}
                         </h3>
-                        <p className="text-xs text-[var(--text-secondary)] opacity-80">
-                            {selectedProfile.description}
-                        </p>
+                        {selectedProfile.isCustom && (
+                            <span className="text-[10px] text-amber-200/80 font-medium tracking-wide">
+                                Neural Clone
+                            </span>
+                        )}
                     </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-1">
-                    <span className="text-[10px] bg-[rgba(255,255,255,0.05)] px-2 py-1 rounded text-[var(--text-secondary)]">
-                        {selectedProfile.tags?.join(' • ') || 'Standard'}
-                    </span>
+                <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-white/10 transition-colors">
                     <svg
-                        className={`w-5 h-5 text-[var(--text-secondary)] transform transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                        className={`w-5 h-5 text-white/60 transform transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
                         fill="none" viewBox="0 0 24 24" stroke="currentColor"
                     >
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -61,19 +91,19 @@ export function VoiceSelector({ selectedVoiceId, onSelect, customVoices = [] }) 
                 </div>
             </button>
 
-            {/* Dropdown / Grid */}
+            {/* Dropdown Panel */}
             {isOpen && (
-                <div className="absolute top-full left-0 w-full mt-4 glass-card overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top">
+                <div className="absolute top-full left-0 w-full mt-4 glass-card overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top rounded-2xl border border-white/10 shadow-2xl ring-1 ring-black/5 p-4 z-50 bg-[#0a0a0a]/90 backdrop-blur-2xl">
 
-                    {/* Filter Tabs */}
-                    <div className="flex gap-2 p-2 mb-2 overflow-x-auto no-scrollbar border-b border-[rgba(255,255,255,0.05)]">
+                    {/* Filters */}
+                    <div className="flex gap-2 mb-4 p-1 bg-white/5 rounded-xl w-fit mx-auto">
                         {['all', 'female', 'male', 'custom'].map(f => (
                             <button
                                 key={f}
                                 onClick={(e) => { e.stopPropagation(); setFilter(f); }}
-                                className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${filter === f
-                                        ? 'bg-[var(--accent-primary)] text-white shadow-[0_0_15px_var(--accent-glow)]'
-                                        : 'text-[var(--text-secondary)] hover:bg-[rgba(255,255,255,0.05)]'
+                                className={`px-4 py-1.5 rounded-lg text-xs font-medium capitalize transition-all duration-200 ${filter === f
+                                        ? 'bg-white/20 text-white shadow-lg'
+                                        : 'text-white/40 hover:text-white/80 hover:bg-white/5'
                                     }`}
                             >
                                 {f}
@@ -81,71 +111,54 @@ export function VoiceSelector({ selectedVoiceId, onSelect, customVoices = [] }) 
                         ))}
                     </div>
 
-                    {/* Scrollable Grid */}
-                    <div className="max-h-[60vh] overflow-y-auto p-2 space-y-2 custom-scrollbar">
+                    {/* Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
                         {filteredVoices.map(voice => (
-                            <div
+                            <button
                                 key={voice.id}
                                 onClick={() => { onSelect(voice); setIsOpen(false); }}
-                                className={`p-3 rounded-xl border border-transparent hover:border-[var(--accent-primary)] hover:bg-[var(--bg-glass-hover)] cursor-pointer transition-all group ${selectedVoiceId === voice.id ? 'bg-[var(--bg-glass-heavy)] border-[var(--accent-secondary)]' : 'bg-transparent'
+                                className={`relative p-3 rounded-xl border text-left transition-all duration-200 group flex items-start gap-3 ${selectedVoiceId === voice.id
+                                        ? 'bg-white/10 border-white/20 shadow-inner'
+                                        : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/5'
                                     }`}
                             >
-                                <div className="flex items-start gap-3">
-                                    <div className="text-2xl mt-1 group-hover:scale-110 transition-transform duration-300">
-                                        {voice.emoji}
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <h4 className={`font-bold ${selectedVoiceId === voice.id ? 'text-[var(--accent-primary)]' : 'text-white'}`}>
-                                                {voice.name}
-                                            </h4>
-                                            {voice.mode === 'asmr' && (
-                                                <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded border border-purple-500/30">
-                                                    ASMR PRO
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        <p className="text-xs text-[var(--text-secondary)] leading-relaxed mb-2">
-                                            {voice.description}
-                                        </p>
-
-                                        {/* Metadata Badges */}
-                                        <div className="flex flex-wrap gap-1.5">
-                                            <Badge label="Warmth" value={voice.characteristics?.warmth} color="orange" />
-                                            <Badge label="Air" value={voice.characteristics?.breathiness} color="cyan" />
-                                            {voice.recommendedFor && (
-                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-[rgba(255,255,255,0.03)] text-[var(--text-muted)] border border-[rgba(255,255,255,0.05)]">
-                                                    Best for: {voice.recommendedFor.split(',')[0]}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
+                                <div className="text-2xl mt-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                                    {voice.emoji}
                                 </div>
-                            </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between mb-0.5">
+                                        <h4 className={`text-sm font-medium truncate ${selectedVoiceId === voice.id ? 'text-white' : 'text-white/80'
+                                            }`}>
+                                            {voice.name}
+                                        </h4>
+                                        {voice.type === 'custom' && (
+                                            <span className="text-[9px] bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-200 px-1.5 py-0.5 rounded border border-amber-500/30">
+                                                PRO
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-white/40 line-clamp-1 group-hover:text-white/60 transition-colors">
+                                        {voice.description}
+                                    </p>
+
+                                    {/* Characteristics Mini-bar */}
+                                    {voice.characteristics && (
+                                        <div className="flex items-center gap-2 mt-2 opacity-50 text-[9px] text-white/30">
+                                            {voice.characteristics.warmth > 0.7 && <span>🔥 Warm</span>}
+                                            {voice.characteristics.breathiness > 0.7 && <span>💨 Airy</span>}
+                                            {voice.characteristics.clarity > 0.8 && <span>✨ Clear</span>}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {selectedVoiceId === voice.id && (
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-green-400 shadow-[0_0_10px_rgba(74,222,128,0.5)]"></div>
+                                )}
+                            </button>
                         ))}
                     </div>
                 </div>
             )}
-        </div>
-    )
-}
-
-function Badge({ label, value, color }) {
-    if (value === undefined) return null
-    // Simple visualizer: filled dots
-    const dots = Math.round(value * 5)
-    return (
-        <div className="flex items-center gap-1.5 bg-[rgba(0,0,0,0.2)] px-2 py-0.5 rounded-full border border-[rgba(255,255,255,0.02)]">
-            <span className="text-[9px] uppercase tracking-wider text-[var(--text-secondary)] font-semibold">{label}</span>
-            <div className="flex gap-0.5">
-                {[...Array(5)].map((_, i) => (
-                    <div
-                        key={i}
-                        className={`w-1 h-3 rounded-full ${i < dots ? `bg-${color}-400 shadow-[0_0_5px_${color}]` : 'bg-[rgba(255,255,255,0.1)]'}`}
-                    />
-                ))}
-            </div>
         </div>
     )
 }

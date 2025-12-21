@@ -8,6 +8,10 @@ import { VideoBackground } from './components/video-background'
 import { VoiceSelector } from './components/voice-selector'
 import { themeManager } from './lib/theme-manager'
 import { AudioEffects } from './lib/audio-effects'
+import { WelcomeHero } from './components/welcome-hero'
+import { AudiobookShelf } from './components/audiobook-shelf'
+import { UrlInput } from './components/url-input'
+import { LiquidSlider } from './components/liquid-slider'
 
 // Sample text for voice preview
 const PREVIEW_TEXT = "Welcome to ASMR Reader. Experience premium AI-powered whisper synthesis."
@@ -152,6 +156,26 @@ export default function App() {
             if (animationRef.current) cancelAnimationFrame(animationRef.current)
             if (audioContextRef.current) audioContextRef.current.close()
         }
+    }, [])
+
+    // Load Custom Voices (F5-TTS Clones)
+    useEffect(() => {
+        const loadVoices = async () => {
+            setLoadingCustomVoices(true)
+            try {
+                const voicesMap = await loadCustomVoices()
+                if (voicesMap) {
+                    const voicesList = Object.values(voicesMap)
+                    setCustomVoices(voicesList)
+                    console.log('Loaded custom voices:', voicesList.length)
+                }
+            } catch (e) {
+                console.warn('Failed to load custom voices:', e)
+            } finally {
+                setLoadingCustomVoices(false)
+            }
+        }
+        loadVoices()
     }, [])
 
     // Initialize audio context and effects when playing
@@ -747,97 +771,46 @@ export default function App() {
                 {/* Left Panel - PDF & Text */}
                 <div className="left-panel">
                     {!pdfText ? (
-                        <div className="welcome-section fade-in">
-                            {/* Hero Section */}
-                            <div className="welcome-hero glass-card">
-                                <h1 className="hero-title">🎧 ASMR Reader</h1>
-                                <p className="hero-subtitle">
-                                    Premium AI-powered whisper synthesis for your documents
-                                </p>
-                                <div className="hero-features">
-                                    <span className="feature-badge">🧠 Neural TTS</span>
-                                    <span className="feature-badge">⚡ GPU Accelerated</span>
-                                    <span className="feature-badge">🎤 28+ Voices</span>
-                                </div>
-                            </div>
+                        <div className="welcome-section">
+                            <WelcomeHero />
 
-                            {/* Voice Demos */}
-                            <div className="voice-demos glass-card">
-                                <h3 className="demos-title">🎵 Listen to Voice Samples</h3>
-                                <p className="demos-subtitle">Pre-generated audio samples - instant playback!</p>
-                                <div className="demos-grid">
-                                    {[
-                                        { name: 'Asian Female', file: '/voices/asian_female_reference.wav', emoji: '🌸' },
-                                        { name: 'American Casual', file: '/voices/american_casual_female_reference.wav', emoji: '🎧' },
-                                        { name: 'Russian Elegance', file: '/voices/russian_high_class_girl_reference.wav', emoji: '❄️' },
-                                        { name: 'Formal Male', file: '/voices/formal_english_male_reference.wav', emoji: '🎙️' }
-                                    ].map((demo) => (
-                                        <div key={demo.name} className="demo-item-container">
-                                            <div className="squishy-toggle small">
-                                                <input
-                                                    type="checkbox"
-                                                    id={`demo-${demo.name}`}
-                                                    checked={playingSample === demo.name}
-                                                    onChange={(e) => handleSamplePlay(demo, e)}
-                                                />
-                                                <label htmlFor={`demo-${demo.name}`} className="squishy-button">
-                                                    <span className="squishy-label">
-                                                        {playingSample === demo.name ? '⏸' : '▶'}
-                                                    </span>
-                                                </label>
-                                            </div>
-                                            <div className="demo-info">
-                                                <span className="demo-emoji">{demo.emoji}</span>
-                                                <span className="demo-name">{demo.name}</span>
-                                            </div>
-                                        </div>
-                                    ))}
+                            <UrlInput
+                                onFetch={(url) => { setWikipediaUrl(url); handleWikipediaFetch(); }}
+                                isLoading={isFetchingWikipedia}
+                            />
+                            {wikipediaError && (
+                                <div className="bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-xl mb-8 flex items-center gap-3">
+                                    <span>⚠️</span>
+                                    <span>{wikipediaError}</span>
                                 </div>
-                            </div>
+                            )}
 
-                            {/* Wikipedia Input Section */}
-                            <div className="wikipedia-section glass-card">
-                                <h3 className="wikipedia-title">🌐 Read from Wikipedia</h3>
-                                <p className="wikipedia-subtitle">Enter a Wikipedia article URL to create an ASMR read</p>
-                                <div className="wikipedia-input-row">
-                                    <input
-                                        type="url"
-                                        className="wikipedia-input"
-                                        placeholder="https://en.wikipedia.org/wiki/ASMR"
-                                        value={wikipediaUrl}
-                                        onChange={(e) => {
-                                            setWikipediaUrl(e.target.value)
-                                            setWikipediaError('')
-                                        }}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleWikipediaFetch()}
-                                        disabled={isFetchingWikipedia}
-                                    />
-                                    <button
-                                        className={`fetch-button liquid-glass-btn ${isFetchingWikipedia ? 'loading' : ''}`}
-                                        onClick={handleWikipediaFetch}
-                                        disabled={!wikipediaUrl.trim() || isFetchingWikipedia}
-                                    >
-                                        {isFetchingWikipedia ? (
-                                            <>
-                                                <div className="spinner-small" />
-                                                Fetching...
-                                            </>
-                                        ) : (
-                                            <>📥 Fetch Article</>
-                                        )}
-                                    </button>
-                                </div>
-                                {wikipediaError && (
-                                    <div className="wikipedia-error">⚠️ {wikipediaError}</div>
-                                )}
-                            </div>
+                            <AudiobookShelf
+                                currentAudio={audioUrl}
+                                onPlay={(book) => {
+                                    if (audioRef.current) {
+                                        audioRef.current.pause()
+                                        audioRef.current.currentTime = 0
+                                    }
+                                    setAudioUrl(book.file)
+                                    setPlayingSample(book.title)
+                                    setTimeout(() => {
+                                        if (audioRef.current) {
+                                            audioRef.current.src = book.file
+                                            initAudioEffects()
+                                            audioRef.current.play()
+                                            drawWaveform()
+                                            setIsPlaying(true)
+                                            if (sleepMode) drawSleepWaveform()
+                                        }
+                                    }, 100)
+                                }}
+                            />
 
-                            {/* Divider */}
                             <div className="content-divider">
                                 <span>or</span>
                             </div>
 
-                            {/* Upload Zone */}
                             <div
                                 className={`upload-zone ${dragOver ? 'dragover' : ''}`}
                                 onClick={() => fileInputRef.current?.click()}
@@ -876,49 +849,52 @@ export default function App() {
                                 placeholder="Edit your text here..."
                             />
                         </div>
-                    )}
+                    )
+                    }
 
                     {/* Audio Player */}
-                    {audioReady && (
-                        <div className="audio-player glass-card fade-in">
-                            <div className="waveform-container">
-                                <canvas ref={canvasRef} className="waveform-canvas" />
-                            </div>
-                            <div className="player-controls">
-                                <div className="squishy-toggle small">
-                                    <input
-                                        type="checkbox"
-                                        id="main-play-toggle"
-                                        checked={isPlaying}
-                                        onChange={togglePlayback}
-                                    />
-                                    <label htmlFor="main-play-toggle" className="squishy-button">
-                                        <span className="squishy-label">{isPlaying ? '⏸' : '▶'}</span>
-                                    </label>
+                    {
+                        audioReady && (
+                            <div className="audio-player glass-card fade-in">
+                                <div className="waveform-container">
+                                    <canvas ref={canvasRef} className="waveform-canvas" />
                                 </div>
-                                <span className="time-display">{currentTime}</span>
-                                <div className="progress-bar" onClick={handleProgressClick}>
-                                    <div className="progress-fill" style={{ width: `${progress}%` }} />
+                                <div className="player-controls">
+                                    <div className="squishy-toggle small">
+                                        <input
+                                            type="checkbox"
+                                            id="main-play-toggle"
+                                            checked={isPlaying}
+                                            onChange={togglePlayback}
+                                        />
+                                        <label htmlFor="main-play-toggle" className="squishy-button">
+                                            <span className="squishy-label">{isPlaying ? '⏸' : '▶'}</span>
+                                        </label>
+                                    </div>
+                                    <span className="time-display">{currentTime}</span>
+                                    <div className="progress-bar" onClick={handleProgressClick}>
+                                        <div className="progress-fill" style={{ width: `${progress}%` }} />
+                                    </div>
+                                    <span className="time-display">{duration}</span>
+                                    <button className="download-btn" onClick={handleDownload} title="Download">
+                                        ⬇️
+                                    </button>
                                 </div>
-                                <span className="time-display">{duration}</span>
-                                <button className="download-btn" onClick={handleDownload} title="Download">
-                                    ⬇️
-                                </button>
+                                <audio
+                                    ref={audioRef}
+                                    onTimeUpdate={handleTimeUpdate}
+                                    onLoadedMetadata={handleLoadedMetadata}
+                                    onEnded={handleEnded}
+                                />
                             </div>
-                            <audio
-                                ref={audioRef}
-                                onTimeUpdate={handleTimeUpdate}
-                                onLoadedMetadata={handleLoadedMetadata}
-                                onEnded={handleEnded}
-                            />
-                        </div>
-                    )}
-                </div>
+                        )
+                    }
+                </div >
 
                 {/* Right Panel - Controls */}
-                <aside className="sidebar">
+                < aside className="sidebar" >
                     {/* Voice Selection */}
-                    <div className="glass-card">
+                    < div className="glass-card" >
                         <div className="section-header">
                             <span className="section-icon">🎤</span>
                             <h3 className="section-title">Select Voice</h3>
@@ -946,10 +922,10 @@ export default function App() {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </div >
 
                     {/* Basic Controls */}
-                    <div className="glass-card">
+                    < div className="glass-card" >
                         <div className="section-header">
                             <span className="section-icon">🎚️</span>
                             <h3 className="section-title">Basic Controls</h3>
@@ -986,10 +962,10 @@ export default function App() {
                                 />
                             </div>
                         </div>
-                    </div>
+                    </div >
 
                     {/* Advanced Settings Toggle */}
-                    <button
+                    < button
                         className="advanced-toggle"
                         onClick={async () => {
                             const newState = !showAdvanced
@@ -1010,287 +986,289 @@ export default function App() {
                     >
                         <span>🎛️ Advanced Settings</span>
                         <span className={`toggle-arrow ${showAdvanced ? 'open' : ''}`}>▼</span>
-                    </button>
+                    </button >
 
                     {/* Advanced Producer Deck */}
-                    {showAdvanced && (
-                        <div className="producer-deck glass-card fade-in">
-                            {/* Custom F5-TTS Voices */}
-                            <div className="deck-section">
-                                <h4 className="deck-title">🎤 Custom Voice Embeddings</h4>
-                                {loadingCustomVoices ? (
-                                    <div className="loading-voices">
-                                        <div className="spinner-small" />
-                                        Loading custom voices...
-                                    </div>
-                                ) : customVoices.length > 0 ? (
-                                    <div className="custom-voices-grid">
-                                        {customVoices.map((voice) => (
+                    {
+                        showAdvanced && (
+                            <div className="producer-deck glass-card fade-in">
+                                {/* Custom F5-TTS Voices */}
+                                <div className="deck-section">
+                                    <h4 className="deck-title">🎤 Custom Voice Embeddings</h4>
+                                    {loadingCustomVoices ? (
+                                        <div className="loading-voices">
+                                            <div className="spinner-small" />
+                                            Loading custom voices...
+                                        </div>
+                                    ) : customVoices.length > 0 ? (
+                                        <div className="custom-voices-grid">
+                                            {customVoices.map((voice) => (
+                                                <button
+                                                    key={voice.id}
+                                                    className={`custom-voice-btn ${selectedVoice.id === voice.id ? 'active' : ''}`}
+                                                    onClick={() => {
+                                                        setSelectedVoice(voice)
+                                                        setSelectedKokoroVoice(voice.kokoroVoice)
+                                                    }}
+                                                    title={`${voice.description}\nKokoro: ${voice.kokoroVoice}`}
+                                                >
+                                                    <span className="voice-emoji">{voice.emoji}</span>
+                                                    <span className="voice-label">{voice.name}</span>
+                                                    <span className="voice-tag">F5-TTS</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="no-custom-voices">No custom voice embeddings found</p>
+                                    )}
+                                </div>
+
+                                {/* Kokoro Voice Override */}
+                                <div className="deck-section">
+                                    <h4 className="deck-title">🔊 Kokoro Voice Override</h4>
+                                    <select
+                                        className="kokoro-select"
+                                        value={selectedKokoroVoice || selectedVoice.kokoroVoice || ''}
+                                        onChange={(e) => setSelectedKokoroVoice(e.target.value)}
+                                    >
+                                        <option value="">Use Profile Default</option>
+                                        <optgroup label="American Female">
+                                            {ALL_KOKORO_VOICES.filter(v => v.accent === 'american' && v.gender === 'female').map(v => (
+                                                <option key={v.id} value={v.id}>{v.name}</option>
+                                            ))}
+                                        </optgroup>
+                                        <optgroup label="American Male">
+                                            {ALL_KOKORO_VOICES.filter(v => v.accent === 'american' && v.gender === 'male').map(v => (
+                                                <option key={v.id} value={v.id}>{v.name}</option>
+                                            ))}
+                                        </optgroup>
+                                        <optgroup label="British Female">
+                                            {ALL_KOKORO_VOICES.filter(v => v.accent === 'british' && v.gender === 'female').map(v => (
+                                                <option key={v.id} value={v.id}>{v.name}</option>
+                                            ))}
+                                        </optgroup>
+                                        <optgroup label="British Male">
+                                            {ALL_KOKORO_VOICES.filter(v => v.accent === 'british' && v.gender === 'male').map(v => (
+                                                <option key={v.id} value={v.id}>{v.name}</option>
+                                            ))}
+                                        </optgroup>
+                                    </select>
+                                </div>
+
+                                {/* Presets */}
+                                <div className="deck-section">
+                                    <h4 className="deck-title">🎨 Audio Presets</h4>
+                                    <div className="preset-grid">
+                                        {Object.entries(AUDIO_PRESETS).map(([key, preset]) => (
                                             <button
-                                                key={voice.id}
-                                                className={`custom-voice-btn ${selectedVoice.id === voice.id ? 'active' : ''}`}
-                                                onClick={() => {
-                                                    setSelectedVoice(voice)
-                                                    setSelectedKokoroVoice(voice.kokoroVoice)
-                                                }}
-                                                title={`${voice.description}\nKokoro: ${voice.kokoroVoice}`}
+                                                key={key}
+                                                className={`preset-btn ${selectedPreset === key ? 'active' : ''}`}
+                                                onClick={() => applyPreset(key)}
                                             >
-                                                <span className="voice-emoji">{voice.emoji}</span>
-                                                <span className="voice-label">{voice.name}</span>
-                                                <span className="voice-tag">F5-TTS</span>
+                                                {preset.name}
                                             </button>
                                         ))}
                                     </div>
-                                ) : (
-                                    <p className="no-custom-voices">No custom voice embeddings found</p>
-                                )}
-                            </div>
-
-                            {/* Kokoro Voice Override */}
-                            <div className="deck-section">
-                                <h4 className="deck-title">🔊 Kokoro Voice Override</h4>
-                                <select
-                                    className="kokoro-select"
-                                    value={selectedKokoroVoice || selectedVoice.kokoroVoice || ''}
-                                    onChange={(e) => setSelectedKokoroVoice(e.target.value)}
-                                >
-                                    <option value="">Use Profile Default</option>
-                                    <optgroup label="American Female">
-                                        {ALL_KOKORO_VOICES.filter(v => v.accent === 'american' && v.gender === 'female').map(v => (
-                                            <option key={v.id} value={v.id}>{v.name}</option>
-                                        ))}
-                                    </optgroup>
-                                    <optgroup label="American Male">
-                                        {ALL_KOKORO_VOICES.filter(v => v.accent === 'american' && v.gender === 'male').map(v => (
-                                            <option key={v.id} value={v.id}>{v.name}</option>
-                                        ))}
-                                    </optgroup>
-                                    <optgroup label="British Female">
-                                        {ALL_KOKORO_VOICES.filter(v => v.accent === 'british' && v.gender === 'female').map(v => (
-                                            <option key={v.id} value={v.id}>{v.name}</option>
-                                        ))}
-                                    </optgroup>
-                                    <optgroup label="British Male">
-                                        {ALL_KOKORO_VOICES.filter(v => v.accent === 'british' && v.gender === 'male').map(v => (
-                                            <option key={v.id} value={v.id}>{v.name}</option>
-                                        ))}
-                                    </optgroup>
-                                </select>
-                            </div>
-
-                            {/* Presets */}
-                            <div className="deck-section">
-                                <h4 className="deck-title">🎨 Audio Presets</h4>
-                                <div className="preset-grid">
-                                    {Object.entries(AUDIO_PRESETS).map(([key, preset]) => (
-                                        <button
-                                            key={key}
-                                            className={`preset-btn ${selectedPreset === key ? 'active' : ''}`}
-                                            onClick={() => applyPreset(key)}
-                                        >
-                                            {preset.name}
-                                        </button>
-                                    ))}
                                 </div>
-                            </div>
 
-                            {/* 7-Band EQ */}
-                            <div className="deck-section">
-                                <h4 className="deck-title">📊 7-Band Equalizer</h4>
-                                <div className="eq-container">
-                                    {['sub', 'bass', 'lowMid', 'mid', 'highMid', 'presence', 'brilliance'].map((band, i) => (
-                                        <div key={band} className="eq-band">
+                                {/* 7-Band EQ */}
+                                <div className="deck-section">
+                                    <h4 className="deck-title">📊 7-Band Equalizer</h4>
+                                    <div className="eq-container">
+                                        {['sub', 'bass', 'lowMid', 'mid', 'highMid', 'presence', 'brilliance'].map((band, i) => (
+                                            <div key={band} className="eq-band">
+                                                <input
+                                                    type="range"
+                                                    className="eq-slider"
+                                                    min="-12"
+                                                    max="12"
+                                                    step="0.5"
+                                                    value={eqSettings[band]}
+                                                    onChange={(e) => updateEQ(band, parseFloat(e.target.value))}
+                                                    orient="vertical"
+                                                />
+                                                <span className="eq-value">{eqSettings[band] > 0 ? '+' : ''}{eqSettings[band]}dB</span>
+                                                <span className="eq-label">{['60', '150', '400', '1k', '2.5k', '5k', '10k'][i]}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Compressor */}
+                                <div className="deck-section">
+                                    <h4 className="deck-title">🔊 Compressor</h4>
+                                    <div className="comp-grid">
+                                        <div className="comp-control">
+                                            <label>Threshold</label>
                                             <input
                                                 type="range"
-                                                className="eq-slider"
-                                                min="-12"
-                                                max="12"
-                                                step="0.5"
-                                                value={eqSettings[band]}
-                                                onChange={(e) => updateEQ(band, parseFloat(e.target.value))}
-                                                orient="vertical"
+                                                min="-60"
+                                                max="0"
+                                                value={compSettings.threshold}
+                                                onChange={(e) => setCompSettings(p => ({ ...p, threshold: +e.target.value }))}
                                             />
-                                            <span className="eq-value">{eqSettings[band] > 0 ? '+' : ''}{eqSettings[band]}dB</span>
-                                            <span className="eq-label">{['60', '150', '400', '1k', '2.5k', '5k', '10k'][i]}</span>
+                                            <span>{compSettings.threshold}dB</span>
                                         </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Compressor */}
-                            <div className="deck-section">
-                                <h4 className="deck-title">🔊 Compressor</h4>
-                                <div className="comp-grid">
-                                    <div className="comp-control">
-                                        <label>Threshold</label>
-                                        <input
-                                            type="range"
-                                            min="-60"
-                                            max="0"
-                                            value={compSettings.threshold}
-                                            onChange={(e) => setCompSettings(p => ({ ...p, threshold: +e.target.value }))}
-                                        />
-                                        <span>{compSettings.threshold}dB</span>
-                                    </div>
-                                    <div className="comp-control">
-                                        <label>Ratio</label>
-                                        <input
-                                            type="range"
-                                            min="1"
-                                            max="20"
-                                            value={compSettings.ratio}
-                                            onChange={(e) => setCompSettings(p => ({ ...p, ratio: +e.target.value }))}
-                                        />
-                                        <span>{compSettings.ratio}:1</span>
+                                        <div className="comp-control">
+                                            <label>Ratio</label>
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="20"
+                                                value={compSettings.ratio}
+                                                onChange={(e) => setCompSettings(p => ({ ...p, ratio: +e.target.value }))}
+                                            />
+                                            <span>{compSettings.ratio}:1</span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Reverb & Spatial */}
-                            <div className="deck-section">
-                                <h4 className="deck-title">🌊 Reverb & Spatial</h4>
-                                <div className="spatial-grid">
-                                    <div className="spatial-control">
-                                        <label>Reverb Mix</label>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="1"
-                                            step="0.01"
-                                            value={reverbMix}
-                                            onChange={(e) => {
-                                                setReverbMix(+e.target.value)
-                                                audioEffectsRef.current?.setReverbMix(+e.target.value)
-                                            }}
-                                        />
-                                        <span>{Math.round(reverbMix * 100)}%</span>
+                                {/* Reverb & Spatial */}
+                                <div className="deck-section">
+                                    <h4 className="deck-title">🌊 Reverb & Spatial</h4>
+                                    <div className="spatial-grid">
+                                        <div className="spatial-control">
+                                            <label>Reverb Mix</label>
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="1"
+                                                step="0.01"
+                                                value={reverbMix}
+                                                onChange={(e) => {
+                                                    setReverbMix(+e.target.value)
+                                                    audioEffectsRef.current?.setReverbMix(+e.target.value)
+                                                }}
+                                            />
+                                            <span>{Math.round(reverbMix * 100)}%</span>
+                                        </div>
+                                        <div className="spatial-control">
+                                            <label>Stereo Width</label>
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="2"
+                                                step="0.1"
+                                                value={stereoWidth}
+                                                onChange={(e) => setStereoWidth(+e.target.value)}
+                                            />
+                                            <span>{stereoWidth.toFixed(1)}</span>
+                                        </div>
+                                        <div className="spatial-control">
+                                            <label>Pan</label>
+                                            <input
+                                                type="range"
+                                                min="-1"
+                                                max="1"
+                                                step="0.1"
+                                                value={pan}
+                                                onChange={(e) => {
+                                                    setPan(+e.target.value)
+                                                    audioEffectsRef.current?.setPan(+e.target.value)
+                                                }}
+                                            />
+                                            <span>{pan === 0 ? 'C' : pan < 0 ? `L${Math.abs(pan * 100).toFixed(0)}` : `R${(pan * 100).toFixed(0)}`}</span>
+                                        </div>
                                     </div>
-                                    <div className="spatial-control">
-                                        <label>Stereo Width</label>
+                                </div>
+
+                                {/* Master */}
+                                <div className="deck-section">
+                                    <h4 className="deck-title">🎚️ Master</h4>
+                                    <div className="master-control">
+                                        <label>Output Gain</label>
                                         <input
                                             type="range"
                                             min="0"
                                             max="2"
-                                            step="0.1"
-                                            value={stereoWidth}
-                                            onChange={(e) => setStereoWidth(+e.target.value)}
-                                        />
-                                        <span>{stereoWidth.toFixed(1)}</span>
-                                    </div>
-                                    <div className="spatial-control">
-                                        <label>Pan</label>
-                                        <input
-                                            type="range"
-                                            min="-1"
-                                            max="1"
-                                            step="0.1"
-                                            value={pan}
+                                            step="0.05"
+                                            value={masterGain}
                                             onChange={(e) => {
-                                                setPan(+e.target.value)
-                                                audioEffectsRef.current?.setPan(+e.target.value)
+                                                setMasterGain(+e.target.value)
+                                                audioEffectsRef.current?.setMasterGain(+e.target.value)
                                             }}
                                         />
-                                        <span>{pan === 0 ? 'C' : pan < 0 ? `L${Math.abs(pan * 100).toFixed(0)}` : `R${(pan * 100).toFixed(0)}`}</span>
+                                        <span>{(masterGain * 100).toFixed(0)}%</span>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Master */}
-                            <div className="deck-section">
-                                <h4 className="deck-title">🎚️ Master</h4>
-                                <div className="master-control">
-                                    <label>Output Gain</label>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="2"
-                                        step="0.05"
-                                        value={masterGain}
-                                        onChange={(e) => {
-                                            setMasterGain(+e.target.value)
-                                            audioEffectsRef.current?.setMasterGain(+e.target.value)
-                                        }}
-                                    />
-                                    <span>{(masterGain * 100).toFixed(0)}%</span>
-                                </div>
-                            </div>
-
-                            {/* Atmosphere & Theme */}
-                            <div className="deck-section">
-                                <h4 className="deck-title">🎨 Atmosphere & Theme</h4>
-                                <div className="atmosphere-grid">
-                                    <div className="theme-control">
-                                        <label>Primary Color</label>
-                                        <input
-                                            type="color"
-                                            defaultValue={themeManager.theme.colors.primary}
-                                            onChange={(e) => themeManager.updateColor('primary', e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="theme-control">
-                                        <label>Accent Color</label>
-                                        <input
-                                            type="color"
-                                            defaultValue={themeManager.theme.colors.accent}
-                                            onChange={(e) => themeManager.updateColor('accent', e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="theme-control">
-                                        <label>Surface Color</label>
-                                        <div className="color-picker-wrapper">
+                                {/* Atmosphere & Theme */}
+                                <div className="deck-section">
+                                    <h4 className="deck-title">🎨 Atmosphere & Theme</h4>
+                                    <div className="atmosphere-grid">
+                                        <div className="theme-control">
+                                            <label>Primary Color</label>
                                             <input
                                                 type="color"
-                                                defaultValue={themeManager.theme.colors.surface || '#0f172a'}
-                                                onChange={(e) => themeManager.updateColor('surface', e.target.value)}
+                                                defaultValue={themeManager.theme.colors.primary}
+                                                onChange={(e) => themeManager.updateColor('primary', e.target.value)}
                                             />
                                         </div>
+                                        <div className="theme-control">
+                                            <label>Accent Color</label>
+                                            <input
+                                                type="color"
+                                                defaultValue={themeManager.theme.colors.accent}
+                                                onChange={(e) => themeManager.updateColor('accent', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="theme-control">
+                                            <label>Surface Color</label>
+                                            <div className="color-picker-wrapper">
+                                                <input
+                                                    type="color"
+                                                    defaultValue={themeManager.theme.colors.surface || '#0f172a'}
+                                                    onChange={(e) => themeManager.updateColor('surface', e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="theme-control wide">
+                                            <LiquidSlider
+                                                label="Backdrop Opacity"
+                                                min={0}
+                                                max={1}
+                                                step={0.05}
+                                                value={themeManager.theme.colors.backdrop_opacity}
+                                                onChange={(val) => themeManager.updateColor('backdrop_opacity', parseFloat(val))}
+                                                unit=""
+                                            />
+                                        </div>
+                                        <button
+                                            className="reset-theme-btn"
+                                            onClick={() => {
+                                                themeManager.reset()
+                                                window.location.reload() // Simple way to refresh completely
+                                            }}
+                                        >
+                                            ↺ Reset Theme
+                                        </button>
                                     </div>
-                                    <div className="theme-control wide">
-                                        <label>Backdrop Opacity</label>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="1"
-                                            step="0.05"
-                                            defaultValue={themeManager.theme.colors.backdrop_opacity}
-                                            onChange={(e) => themeManager.updateColor('backdrop_opacity', parseFloat(e.target.value))}
-                                        />
-                                    </div>
+                                    <p className="theme-hint">
+                                        * Drag & Drop any Image or Video to set a custom background!
+                                    </p>
+                                </div>
+
+                                {/* Sleep Mode Demo Launch */}
+                                <div className="deck-section">
+                                    <h4 className="deck-title">🌙 Sleep Mode Demo</h4>
                                     <button
-                                        className="reset-theme-btn"
+                                        className="sleep-mode-toggle"
                                         onClick={() => {
-                                            themeManager.reset()
-                                            window.location.reload() // Simple way to refresh completely
+                                            setSleepMode(true)
+                                            // Ensure volume is appropriate
+                                            if (audioRef.current) audioRef.current.volume = sleepModeVolume
                                         }}
                                     >
-                                        ↺ Reset Theme
+                                        <span className="sleep-btn-text">Launch Sleep Demo</span>
+                                        <div className="sleep-btn-progress"></div>
                                     </button>
+                                    <p className="sleep-hint" style={{ marginTop: '0.5rem', textAlign: 'center' }}>
+                                        Experience the ambient mode without generating audio
+                                    </p>
                                 </div>
-                                <p className="theme-hint">
-                                    * Drag & Drop any Image or Video to set a custom background!
-                                </p>
                             </div>
-
-                            {/* Sleep Mode Demo Launch */}
-                            <div className="deck-section">
-                                <h4 className="deck-title">🌙 Sleep Mode Demo</h4>
-                                <button
-                                    className="sleep-mode-toggle"
-                                    onClick={() => {
-                                        setSleepMode(true)
-                                        // Ensure volume is appropriate
-                                        if (audioRef.current) audioRef.current.volume = sleepModeVolume
-                                    }}
-                                >
-                                    <span className="sleep-btn-text">Launch Sleep Demo</span>
-                                    <div className="sleep-btn-progress"></div>
-                                </button>
-                                <p className="sleep-hint" style={{ marginTop: '0.5rem', textAlign: 'center' }}>
-                                    Experience the ambient mode without generating audio
-                                </p>
-                            </div>
-                        </div>
-                    )}
+                        )
+                    }
 
                     {/* Generate Button */}
                     <button
@@ -1311,154 +1289,158 @@ export default function App() {
                     </button>
 
                     {/* Sleep Mode Toggle Button */}
-                    {audioReady && (
-                        <button
-                            className={`sleep-mode-toggle ${sleepModeActivating ? 'activating' : ''} ${sleepMode ? 'active' : ''}`}
-                            onClick={toggleSleepMode}
-                            disabled={sleepModeActivating}
-                        >
-                            <span className="sleep-btn-text">
-                                {sleepMode ? '☀️ Exit Sleep Mode' : '🌙 Sleep Mode'}
-                            </span>
-                            <div className="sleep-btn-progress">
-                                <div className="sleep-btn-progress-fill" />
-                            </div>
-                            <svg className="sleep-btn-check" viewBox="0 0 24 24">
-                                <path className="check-path" d="M4.5 12.5l5 5L19.5 7" fill="none" stroke="currentColor" strokeWidth="2" />
-                            </svg>
-                        </button>
-                    )}
-                </aside>
-            </main>
+                    {
+                        audioReady && (
+                            <button
+                                className={`sleep-mode-toggle ${sleepModeActivating ? 'activating' : ''} ${sleepMode ? 'active' : ''}`}
+                                onClick={toggleSleepMode}
+                                disabled={sleepModeActivating}
+                            >
+                                <span className="sleep-btn-text">
+                                    {sleepMode ? '☀️ Exit Sleep Mode' : '🌙 Sleep Mode'}
+                                </span>
+                                <div className="sleep-btn-progress">
+                                    <div className="sleep-btn-progress-fill" />
+                                </div>
+                                <svg className="sleep-btn-check" viewBox="0 0 24 24">
+                                    <path className="check-path" d="M4.5 12.5l5 5L19.5 7" fill="none" stroke="currentColor" strokeWidth="2" />
+                                </svg>
+                            </button>
+                        )
+                    }
+                </aside >
+            </main >
 
             {/* Sleep Mode Overlay */}
-            {sleepMode && (
-                <div className="sleep-mode-overlay">
-                    <div className="sleep-mode-content">
-                        {/* Exit Button */}
-                        <button className="sleep-exit-btn" onClick={() => {
-                            setSleepMode(false)
-                            if (audioRef.current) audioRef.current.volume = 1.0
-                        }}>
-                            <span>✕</span>
-                        </button>
+            {
+                sleepMode && (
+                    <div className="sleep-mode-overlay">
+                        <div className="sleep-mode-content">
+                            {/* Exit Button */}
+                            <button className="sleep-exit-btn" onClick={() => {
+                                setSleepMode(false)
+                                if (audioRef.current) audioRef.current.volume = 1.0
+                            }}>
+                                <span>✕</span>
+                            </button>
 
-                        {/* Title */}
-                        <div className="sleep-header">
-                            <h2 className="sleep-title">🌙 Sleep Mode</h2>
-                            <p className="sleep-subtitle">Relax with ambient audio visualization</p>
-                        </div>
-
-                        {/* AI Waveform Visualization Canvas */}
-                        <div className="sleep-waveform-container">
-                            <canvas
-                                ref={sleepCanvasRef}
-                                className="sleep-waveform-canvas"
-                                width={800}
-                                height={200}
-                            />
-                        </div>
-
-                        {/* Volume Display */}
-                        <div className="sleep-volume-display">
-                            <span className="volume-label">Volume</span>
-                            <span className="volume-value">{Math.round(sleepModeVolume * 100)}%</span>
-                        </div>
-
-                        {/* Squishy Volume Controls */}
-                        <div className="sleep-controls">
-                            {/* Volume Down - Squishy Button */}
-                            <div className="squishy-toggle">
-                                <input
-                                    type="checkbox"
-                                    id="vol-down"
-                                    onChange={() => adjustSleepVolume(-0.1)}
-                                />
-                                <label htmlFor="vol-down" className="squishy-button">
-                                    <span className="squishy-label">−</span>
-                                </label>
+                            {/* Title */}
+                            <div className="sleep-header">
+                                <h2 className="sleep-title">🌙 Sleep Mode</h2>
+                                <p className="sleep-subtitle">Relax with ambient audio visualization</p>
                             </div>
 
-                            {/* Play/Pause - Large Center Button */}
-                            <div className="squishy-toggle large">
-                                <input
-                                    type="checkbox"
-                                    id="sleep-play"
-                                    checked={isPlaying || !!playingSample}
-                                    onChange={(e) => {
-                                        if (playingSample) {
-                                            // Determine which sample object to toggle based on name
-                                            const sampleObj = [
-                                                { name: 'Asian Female', file: '/voices/asian_female_reference.wav' },
-                                                { name: 'American Casual', file: '/voices/american_casual_female_reference.wav' },
-                                                { name: 'Russian Elegance', file: '/voices/russian_high_class_girl_reference.wav' },
-                                                { name: 'Formal Male', file: '/voices/formal_english_male_reference.wav' }
-                                            ].find(s => s.name === playingSample);
+                            {/* AI Waveform Visualization Canvas */}
+                            <div className="sleep-waveform-container">
+                                <canvas
+                                    ref={sleepCanvasRef}
+                                    className="sleep-waveform-canvas"
+                                    width={800}
+                                    height={200}
+                                />
+                            </div>
 
-                                            if (sampleObj) {
-                                                handleSamplePlay(sampleObj, { stopPropagation: () => { } });
+                            {/* Volume Display */}
+                            <div className="sleep-volume-display">
+                                <span className="volume-label">Volume</span>
+                                <span className="volume-value">{Math.round(sleepModeVolume * 100)}%</span>
+                            </div>
+
+                            {/* Squishy Volume Controls */}
+                            <div className="sleep-controls">
+                                {/* Volume Down - Squishy Button */}
+                                <div className="squishy-toggle">
+                                    <input
+                                        type="checkbox"
+                                        id="vol-down"
+                                        onChange={() => adjustSleepVolume(-0.1)}
+                                    />
+                                    <label htmlFor="vol-down" className="squishy-button">
+                                        <span className="squishy-label">−</span>
+                                    </label>
+                                </div>
+
+                                {/* Play/Pause - Large Center Button */}
+                                <div className="squishy-toggle large">
+                                    <input
+                                        type="checkbox"
+                                        id="sleep-play"
+                                        checked={isPlaying || !!playingSample}
+                                        onChange={(e) => {
+                                            if (playingSample) {
+                                                // Determine which sample object to toggle based on name
+                                                const sampleObj = [
+                                                    { name: 'Asian Female', file: '/voices/asian_female_reference.wav' },
+                                                    { name: 'American Casual', file: '/voices/american_casual_female_reference.wav' },
+                                                    { name: 'Russian Elegance', file: '/voices/russian_high_class_girl_reference.wav' },
+                                                    { name: 'Formal Male', file: '/voices/formal_english_male_reference.wav' }
+                                                ].find(s => s.name === playingSample);
+
+                                                if (sampleObj) {
+                                                    handleSamplePlay(sampleObj, { stopPropagation: () => { } });
+                                                }
+                                            } else {
+                                                togglePlayback();
                                             }
-                                        } else {
-                                            togglePlayback();
-                                        }
-                                    }}
-                                />
-                                <label htmlFor="sleep-play" className="squishy-button">
-                                    <span className="squishy-label">{(isPlaying || !!playingSample) ? '⏸' : '▶'}</span>
-                                </label>
+                                        }}
+                                    />
+                                    <label htmlFor="sleep-play" className="squishy-button">
+                                        <span className="squishy-label">{(isPlaying || !!playingSample) ? '⏸' : '▶'}</span>
+                                    </label>
+                                </div>
+
+                                {/* Volume Up - Squishy Button */}
+                                <div className="squishy-toggle">
+                                    <input
+                                        type="checkbox"
+                                        id="vol-up"
+                                        onChange={() => adjustSleepVolume(0.1)}
+                                    />
+                                    <label htmlFor="vol-up" className="squishy-button">
+                                        <span className="squishy-label">+</span>
+                                    </label>
+                                </div>
                             </div>
 
-                            {/* Volume Up - Squishy Button */}
-                            <div className="squishy-toggle">
-                                <input
-                                    type="checkbox"
-                                    id="vol-up"
-                                    onChange={() => adjustSleepVolume(0.1)}
-                                />
-                                <label htmlFor="vol-up" className="squishy-button">
-                                    <span className="squishy-label">+</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        {/* Sleep Mode Samples List */}
-                        <div className="sleep-samples-list">
-                            <h4 className="sleep-samples-title">🎵 Ambient Voice Samples</h4>
-                            <div className="sleep-samples-grid">
-                                {[
-                                    { name: 'Asian Female', file: '/voices/asian_female_reference.wav', emoji: '🌸' },
-                                    { name: 'American Casual', file: '/voices/american_casual_female_reference.wav', emoji: '🎧' },
-                                    { name: 'Russian Elegance', file: '/voices/russian_high_class_girl_reference.wav', emoji: '❄️' },
-                                    { name: 'Formal Male', file: '/voices/formal_english_male_reference.wav', emoji: '🎙️' }
-                                ].map((demo) => (
-                                    <div key={demo.name} className="demo-item-container sleep-demo-item">
-                                        <div className="squishy-toggle small">
-                                            <input
-                                                type="checkbox"
-                                                id={`sleep-demo-${demo.name}`}
-                                                checked={playingSample === demo.name}
-                                                onChange={(e) => handleSamplePlay(demo, e)}
-                                            />
-                                            <label htmlFor={`sleep-demo-${demo.name}`} className="squishy-button">
-                                                <span className="squishy-label">
-                                                    {playingSample === demo.name ? '⏸' : '▶'}
-                                                </span>
-                                            </label>
+                            {/* Sleep Mode Samples List */}
+                            <div className="sleep-samples-list">
+                                <h4 className="sleep-samples-title">🎵 Ambient Voice Samples</h4>
+                                <div className="sleep-samples-grid">
+                                    {[
+                                        { name: 'Asian Female', file: '/voices/asian_female_reference.wav', emoji: '🌸' },
+                                        { name: 'American Casual', file: '/voices/american_casual_female_reference.wav', emoji: '🎧' },
+                                        { name: 'Russian Elegance', file: '/voices/russian_high_class_girl_reference.wav', emoji: '❄️' },
+                                        { name: 'Formal Male', file: '/voices/formal_english_male_reference.wav', emoji: '🎙️' }
+                                    ].map((demo) => (
+                                        <div key={demo.name} className="demo-item-container sleep-demo-item">
+                                            <div className="squishy-toggle small">
+                                                <input
+                                                    type="checkbox"
+                                                    id={`sleep-demo-${demo.name}`}
+                                                    checked={playingSample === demo.name}
+                                                    onChange={(e) => handleSamplePlay(demo, e)}
+                                                />
+                                                <label htmlFor={`sleep-demo-${demo.name}`} className="squishy-button">
+                                                    <span className="squishy-label">
+                                                        {playingSample === demo.name ? '⏸' : '▶'}
+                                                    </span>
+                                                </label>
+                                            </div>
+                                            <div className="demo-info">
+                                                <span className="demo-emoji">{demo.emoji}</span>
+                                                <span className="demo-name">{demo.name}</span>
+                                            </div>
                                         </div>
-                                        <div className="demo-info">
-                                            <span className="demo-emoji">{demo.emoji}</span>
-                                            <span className="demo-name">{demo.name}</span>
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
                             </div>
-                        </div>
 
-                        {/* Hint */}
-                        <p className="sleep-hint">Press ESC to exit</p>
+                            {/* Hint */}
+                            <p className="sleep-hint">Press ESC to exit</p>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     )
 }

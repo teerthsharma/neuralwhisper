@@ -1,194 +1,87 @@
-<p align="center">
-  <img src="https://img.shields.io/badge/Neural_TTS-82M_Params-FF6B6B?style=for-the-badge" alt="Neural TTS"/>
-  <img src="https://img.shields.io/badge/WebGPU-Accelerated-76B900?style=for-the-badge&logo=nvidia" alt="WebGPU"/>
-  <img src="https://img.shields.io/badge/100%25-Client_Side-4FC3F7?style=for-the-badge" alt="Client Side"/>
-  <img src="https://img.shields.io/github/license/YOUR_USERNAME/neuralwhisper?style=for-the-badge" alt="License"/>
-</p>
+# 🌊 Open Source ASMR Reader ("Zen Edition")
 
-<h1 align="center">🌙 NeuralWhisper</h1>
+> *The world's most intelligent, high-fidelity neural audio reader.*
 
-<p align="center">
-  <strong>AI-Powered Whisper Synthesis</strong><br/>
-  An 82 million parameter neural TTS model running 100% in your browser.<br/>
-  No servers. No API calls. Just your GPU rendering soothing ASMR voices.
-</p>
+![Zen UI Preview](https://via.placeholder.com/1200x600?text=Zen+UI+Preview)
 
-<p align="center">
-  <a href="#-features">Features</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-how-it-works">How It Works</a> •
-  <a href="#-contributing">Contributing</a>
-</p>
+**ASMR Reader** is a next-generation text-to-speech application designed for deep relaxation, podcasting, and immersive reading. It moves beyond standard TTS by combining **Neural Document Processing** with a **High-Fidelity WebGPU Audio Stack** to create an experience that feels alive.
 
----
+## 🚀 Key Features ("Game-Changing")
 
-## 🧠 Why NeuralWhisper?
+### 🧠 Neural Document Intelligence
+Stop listening to broken PDF text. Our **Neural Processor** understands layout and flow.
+-   **Spatial Reconstruction**: Reads PDF `transform` matrices to reconstruct multi-column layouts perfectly.
+-   **NLP Segmentation**: Uses natural language processing to detect "breath groups," inserting dynamic pauses where a human reader would breath.
+-   **Smart Cleaning**: Automatically removes neurological interruptions like headers, footers, and page numbers.
 
-Traditional web TTS uses robotic voices or expensive API calls. NeuralWhisper downloads a **real neural network** to your browser and runs inference on your GPU. The result? Studio-quality ASMR voices with zero latency and complete privacy.
+### 🔊 Studio-Grade Audio Stack (FP32)
+We don't do "robotic." We do **Hyper-Realism**.
+-   **WebGPU Accelerated**: Runs `Kokoro-82M` models directly on your GPU in **Full Precision (FP32)** mode. No quantization artifacts.
+-   **Real-Time DSP**: Integrated "Atmosphere" chain with:
+    -   *Dynamics Compressor*: Smooths volume for ASMR intimacy.
+    -   *7-Band EQ*: Presets for "ASMR," "Podcast Host," and "Reference."
+-   **Robust Fallback**: Automatically degrades from `WebGPU -> WASM -> WebSpeech` if hardware limits are hit.
 
-| Traditional TTS | NeuralWhisper |
-|-----------------|---------------|
-| ❌ Robotic voices | ✅ Neural 82M model |
-| ❌ Server dependency | ✅ 100% client-side |
-| ❌ API costs | ✅ Completely free |
-| ❌ Privacy concerns | ✅ Your data stays local |
+### 🎨 "Zen" Atmosphere System
+Your reading environment matters.
+-   **Dynamic Glassmorphism**: The UI adapts to your background using real-time blur and color mixing.
+-   **Live Backgrounds**: Drag & Drop **4K Video Loops** or Images to set the mood.
+-   **The Hive Mind**: The app **learns** from you. If you skip pauses or speed up specific voices, it remembers and adapts future playback automatically.
 
----
-
-## ✨ Features
-
-| Feature | Description |
-|---------|-------------|
-| 🧠 **Neural TTS** | Kokoro 82M model via ONNX Runtime WebGPU |
-| 📄 **PDF Upload** | Drag-and-drop with intelligent text extraction |
-| 🎤 **28+ Voices** | Male/female, US/UK accents, various styles |
-| 🎚️ **ASMR Controls** | Pitch & speed for perfect whisper effect |
-| 🌊 **GPU Waveform** | Real-time audio visualization |
-| 🌙 **Premium UI** | Glassmorphism dark theme |
+### 🎙️ F5-TTS Voice Cloning (Advanced)
+Clone any voice with industry-leading precision.
+-   **Strict CUDA Backend**: Python scripts enforce NVIDIA GPU usage to extract deep vocal characteristics (warmth, breathiness, pitch).
+-   **Voice Manifest**: Auto-generates JSON profiles that map your custom samples to the closest neural characteristics in the engine.
 
 ---
 
-## 🚀 Quick Start
+## 🛠️ Architecture
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for a deep dive into the Neural Processor, Hive Mind vectors, and DSP signal flow.
+
+## 📦 Installation (Local)
 
 ### Prerequisites
-- Node.js 18+
-- Modern browser with WebGPU support (Chrome 113+, Edge 113+)
+-   Node.js 18+
+-   Python 3.10+ (for Voice Cloning)
+-   NVIDIA GPU (Optional, for Cloning/Fast Inference)
 
-### Development
-
+### 1. Clone & Install
 ```bash
-# Clone the repository
-git clone https://github.com/YOUR_USERNAME/neuralwhisper.git
-cd neuralwhisper
+git clone https://github.com/your-username/asmr-reader.git
+cd asmr-reader
 
-# Install dependencies
+# Install Frontend
 cd frontend
 npm install
 
-# Start development server
+# Install Python Backend (Optional)
+cd ../scripts
+pip install -r requirements.txt
+```
+
+### 2. Run Development Server
+```bash
+cd frontend
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173)
+## 🌍 Deployment
 
-> ⚠️ **First load downloads ~160MB model.** Subsequent loads use browser cache.
-
-### Production Build
-
-```bash
-npm run build
-npm run preview
-```
-
-### Docker
-
-```bash
-docker-compose up -d
-# Access at http://localhost:3000
-```
-
----
-
-## 🔊 How It Works
-
-```mermaid
-sequenceDiagram
-    participant User as 📝 Text Input
-    participant Kokoro as 🧠 Kokoro-js
-    participant ONNX as ⚙️ ONNX Runtime
-    participant GPU as ⚡ WebGPU
-    participant Audio as 🔊 24kHz Audio
-    
-    User->>Kokoro: "Hello world"
-    Kokoro->>Kokoro: Phonemize (IPA)
-    Kokoro->>ONNX: Tensor input
-    ONNX->>GPU: Neural network inference
-    Note over GPU: 82M parameters<br/>StyleTTS2 architecture
-    GPU->>ONNX: Waveform tensor
-    ONNX->>Audio: 24kHz PCM output
-```
-
-Your browser:
-1. **Downloads** the Kokoro-82M ONNX model (~160MB, cached)
-2. **Initializes** ONNX Runtime with WebGPU backend
-3. **Runs inference** on your GPU for each text chunk
-4. **Outputs** 24kHz studio-quality audio
-
----
-
-## 🎤 Available Voices
-
-| Voice | Accent | Style |
-|-------|--------|-------|
-| ❤️ Heart | US Female | Warm, intimate |
-| 🔥 Bella | US Female | Energetic |
-| 👑 Emma | UK Female | Refined |
-| 🐺 Fenrir | US Male | Deep |
-| 🎩 George | UK Male | Formal |
-
-[See all 28 voices →](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX#samples)
-
----
-
-## 📁 Project Structure
-
-```
-neuralwhisper/
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx           # Main application
-│   │   ├── lib/
-│   │   │   ├── tts-gpu-engine.js  # WebGPU TTS
-│   │   │   └── pdf-parser.js      # PDF extraction
-│   │   └── index.css         # Glassmorphism styles
-│   └── vite.config.js
-├── scripts/                  # Voice processing tools
-├── docs/                     # Architecture docs
-└── docker-compose.yml
-```
-
----
-
-## 🌐 Browser Support
-
-| Browser | Min Version | Notes |
-|---------|-------------|-------|
-| Chrome/Edge | 113+ | Full WebGPU support |
-| Firefox | Nightly | `dom.webgpu.enabled` flag |
-| Safari | 18+ | Tech Preview |
-
-> Falls back to **WebAssembly** (CPU) if WebGPU unavailable.
-
----
+### Vercel (Recommended)
+This project is optimized for Vercel.
+1.  Install Vercel CLI: `npm i -g vercel`
+2.  Deploy:
+    ```bash
+    vercel --prod
+    ```
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md).
+We welcome PRs for:
+-   New DSP Audio Presets
+-   Enhanced PDF Parsing Heuristics
+-   New Visual Themes
 
-```bash
-# Fork, clone, and create a branch
-git checkout -b feature/amazing-feature
-
-# Make your changes and test
-npm run build
-
-# Commit and push
-git commit -m "feat: add amazing feature"
-git push origin feature/amazing-feature
-```
-
----
-
-## 📜 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-<p align="center">
-  <strong>🌙 Neural whispers. ⚡ Your GPU. 🎧 Pure ASMR.</strong>
-</p>
-
-<p align="center">
-  <sub>Built with ❤️ using Kokoro-82M, ONNX Runtime, React, and Vite</sub>
-</p>
+## 📄 License
+MIT License. Built with ❤️ for the ASMR community.

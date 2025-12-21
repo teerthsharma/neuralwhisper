@@ -6,6 +6,7 @@
 
 // Built-in voice profiles (always available, lightweight)
 export const VOICE_PROFILES = {
+    // === STANDARD VOICES ===
     asian_female: {
         id: 'asian_female',
         name: 'Asian Female',
@@ -14,11 +15,7 @@ export const VOICE_PROFILES = {
         kokoroVoice: 'af_bella',
         defaultPitch: 1.1,
         defaultSpeed: 0.8,
-        characteristics: {
-            warmth: 0.7,
-            breathiness: 0.8,
-            clarity: 0.9
-        }
+        characteristics: { warmth: 0.7, breathiness: 0.8, clarity: 0.9 }
     },
     american_casual: {
         id: 'american_casual',
@@ -28,11 +25,7 @@ export const VOICE_PROFILES = {
         kokoroVoice: 'af_sarah',
         defaultPitch: 1.0,
         defaultSpeed: 0.85,
-        characteristics: {
-            warmth: 0.8,
-            breathiness: 0.6,
-            clarity: 0.85
-        }
+        characteristics: { warmth: 0.8, breathiness: 0.6, clarity: 0.85 }
     },
     russian_highclass: {
         id: 'russian_highclass',
@@ -42,11 +35,7 @@ export const VOICE_PROFILES = {
         kokoroVoice: 'af_nicole',
         defaultPitch: 0.95,
         defaultSpeed: 0.75,
-        characteristics: {
-            warmth: 0.6,
-            breathiness: 0.7,
-            clarity: 0.95
-        }
+        characteristics: { warmth: 0.6, breathiness: 0.7, clarity: 0.95 }
     },
     male_deep: {
         id: 'male_deep',
@@ -56,25 +45,69 @@ export const VOICE_PROFILES = {
         kokoroVoice: 'am_adam',
         defaultPitch: 0.85,
         defaultSpeed: 0.8,
-        characteristics: {
-            warmth: 0.9,
-            breathiness: 0.5,
-            clarity: 0.8
-        }
+        characteristics: { warmth: 0.9, breathiness: 0.5, clarity: 0.8 }
+    },
+
+    // === NEURAL MODES (ASMR / PODCAST) ===
+    asmr_soft: {
+        id: 'asmr_soft',
+        name: 'ASMR Soft Trigger',
+        description: 'Super-close, breathy, binaural-ready',
+        emoji: '🤫',
+        kokoroVoice: 'af_bella', // Bella is naturally soft
+        defaultPitch: 1.05, // Slightly higher for "cute" whisper or 0.9 for deep
+        defaultSpeed: 0.7, // Very slow
+        mode: 'asmr', // Used by engine to trigger DSP
+        characteristics: { warmth: 0.9, breathiness: 1.0, clarity: 0.6 }
+    },
+    podcast_host: {
+        id: 'podcast_host',
+        name: 'Podcast Host',
+        description: 'Energetic, broadcast-quality compression',
+        emoji: '📻',
+        kokoroVoice: 'am_michael',
+        defaultPitch: 1.0,
+        defaultSpeed: 1.05, // Slightly faster
+        mode: 'podcast',
+        characteristics: { warmth: 0.5, breathiness: 0.2, clarity: 1.0 }
     }
 }
 
 export const VOICE_LIST = Object.values(VOICE_PROFILES)
 
+/**
+ * FIXED: Get Voice Profile logic
+ * Now correctly handles raw Kokoro IDs (e.g. 'af_sky') by generating a temporary profile
+ */
 export function getVoiceProfile(voiceId) {
-    // Check built-in profiles first
+    // 1. Check built-in profiles
     if (VOICE_PROFILES[voiceId]) {
         return VOICE_PROFILES[voiceId]
     }
-    // Check custom voices cache
+
+    // 2. Check custom voices cache
     if (customVoicesCache && customVoicesCache[voiceId]) {
         return customVoicesCache[voiceId]
     }
+
+    // 3. Check if it's a raw Kokoro ID (fallback/override support)
+    const rawVoice = ALL_KOKORO_VOICES.find(v => v.id === voiceId);
+    if (rawVoice) {
+        return {
+            id: rawVoice.id,
+            name: rawVoice.name,
+            description: `Standard ${rawVoice.accent} ${rawVoice.gender} voice`,
+            emoji: '🗣️',
+            kokoroVoice: rawVoice.id,
+            defaultPitch: 1.0,
+            defaultSpeed: 1.0,
+            isRaw: true,
+            characteristics: { warmth: 0.5, breathiness: 0.5, clarity: 0.5 }
+        };
+    }
+
+    // Default fallback
+    console.warn(`Voice ID '${voiceId}' not found, falling back to American Casual.`);
     return VOICE_PROFILES.american_casual
 }
 
@@ -85,10 +118,6 @@ export function getVoiceProfile(voiceId) {
 let customVoicesCache = null
 let customVoicesLoading = false
 
-/**
- * Lazy load custom voice embeddings from the manifest
- * Only called when user opens advanced settings
- */
 export async function loadCustomVoices() {
     if (customVoicesCache) return customVoicesCache
     if (customVoicesLoading) return null
@@ -103,8 +132,6 @@ export async function loadCustomVoices() {
         }
 
         const manifest = await response.json()
-
-        // Transform manifest voices into profile format
         customVoicesCache = {}
 
         for (const [id, voice] of Object.entries(manifest.voices)) {
@@ -116,26 +143,16 @@ export async function loadCustomVoices() {
                 kokoroVoice: voice.kokoro_voice,
                 referenceClip: voice.reference_clip,
                 isCustom: true,
-
-                // Use recommended settings from embedding generation
                 defaultPitch: voice.recommended_settings?.pitch || 1.0,
                 defaultSpeed: voice.recommended_settings?.speed || 1.0,
-
-                // Voice characteristics from audio analysis
                 characteristics: {
                     warmth: voice.characteristics?.warmth || 0.5,
                     breathiness: voice.characteristics?.breathiness || 0.5,
                     clarity: voice.characteristics?.clarity || 0.5,
-                    estimatedPitchHz: voice.characteristics?.estimated_pitch_hz,
-                    spectralCentroid: voice.characteristics?.spectral_centroid
                 },
-
-                // Advanced producer settings
                 advanced: voice.advanced || {}
             }
         }
-
-        console.log(`[Voices] Loaded ${Object.keys(customVoicesCache).length} custom voices`)
         return customVoicesCache
 
     } catch (error) {
@@ -146,9 +163,6 @@ export async function loadCustomVoices() {
     }
 }
 
-/**
- * Get emoji based on voice name
- */
 function getEmojiForVoice(name) {
     const nameLower = name.toLowerCase()
     if (nameLower.includes('asian')) return '🌸'
@@ -159,10 +173,6 @@ function getEmojiForVoice(name) {
     return '🔊'
 }
 
-/**
- * Get combined list: built-in + custom voices
- * Custom voices only available after loadCustomVoices() is called
- */
 export function getAllVoices() {
     const voices = [...VOICE_LIST]
     if (customVoicesCache) {
@@ -171,16 +181,10 @@ export function getAllVoices() {
     return voices
 }
 
-/**
- * Get only custom voices (for advanced mode)
- */
 export function getCustomVoices() {
     return customVoicesCache ? Object.values(customVoicesCache) : []
 }
 
-/**
- * Check if custom voices are loaded
- */
 export function areCustomVoicesLoaded() {
     return customVoicesCache !== null
 }

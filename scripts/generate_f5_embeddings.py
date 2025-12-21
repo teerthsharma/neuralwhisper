@@ -19,14 +19,18 @@ import numpy as np
 import torch
 import torchaudio
 
-# Force NVIDIA GPU if available
+# Force NVIDIA GPU - STRICT MODE
 if torch.cuda.is_available():
-    DEVICE = torch.device("cuda:0")  # Explicitly use first CUDA device (NVIDIA)
-    torch.cuda.set_device(0)
-    print(f"🚀 Using GPU: {torch.cuda.get_device_name(0)}")
+    DEVICE = torch.device("cuda:0")
+    torch.backends.cudnn.benchmark = True # Enable cudnn autotuner for max speed
+    torch.backends.cuda.matmul.allow_tf32 = True # Allow TF32 for speed
+    print(f"🚀 Using NVIDIA GPU: {torch.cuda.get_device_name(0)}")
+    print(f"⚡ CUDA Version: {torch.version.cuda}")
 else:
-    DEVICE = torch.device("cpu")
-    print("⚠️ CUDA not available, using CPU")
+    # User requested NO COMPROMISE on performance
+    print("❌ CRITICAL: NVIDIA GPU NOT DETECTED!")
+    print("   Please ensure CUDA is installed and available.")
+    DEVICE = torch.device("cpu") # Fallback but warn heavily
 import soundfile as sf
 from pathlib import Path
 import hashlib

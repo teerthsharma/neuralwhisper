@@ -1,10 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { extractTextFromPDF } from './lib/pdf-parser'
+import { processDocument } from './lib/document-processor'
 import { TTSGPUEngine } from './lib/tts-gpu-engine'
 import { VOICE_LIST, loadCustomVoices, getCustomVoices, areCustomVoicesLoaded, ALL_KOKORO_VOICES, getVoiceProfile } from './lib/voice-profiles'
 import { AudioEffects, AUDIO_PRESETS } from './lib/audio-effects'
 import { previewCache } from './lib/preview-cache'
 import { fetchWikipediaArticle, isValidWikipediaUrl } from './lib/wikipedia-scraper'
+import { VideoBackground } from './components/video-background'
+import { themeManager } from './lib/theme-manager'
 
 // Sample text for voice preview
 const PREVIEW_TEXT = "Welcome to ASMR Reader. Experience premium AI-powered whisper synthesis."
@@ -202,21 +204,28 @@ export default function App() {
         draw()
     }, [])
 
-    // Handle file upload
+    // Handle file upload (PDF or Text)
     const handleFileUpload = useCallback(async (file) => {
-        if (!file || file.type !== 'application/pdf') {
-            alert('Please upload a PDF file')
+        if (!file) return
+
+        // Handle Media Upload for Background
+        if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+            await themeManager.setMediaBackground(file)
             return
         }
 
+        // Handle Document Upload
         try {
-            const text = await extractTextFromPDF(file)
-            setPdfText(text)
+            const result = await processDocument(file)
+            // Join segments back for text editor, but keep structure for later if needed.
+            // For now, we just show the full text, but the engine handles it smartly.
+            const fullText = result.segments.map(s => s.text).join('\n\n')
+            setPdfText(fullText)
             setAudioReady(false)
             setAudioUrl(null)
         } catch (error) {
-            console.error('PDF extraction failed:', error)
-            alert('Failed to extract text from PDF')
+            console.error('Document processing failed:', error)
+            alert('Failed to process file. Supported formats: PDF, TXT')
         }
     }, [])
 
@@ -638,6 +647,8 @@ export default function App() {
 
     return (
         <div className="app">
+            <VideoBackground />
+
             {/* Header */}
             <header className="header">
                 <div className="logo">
@@ -775,12 +786,12 @@ export default function App() {
                             >
                                 <div className="upload-icon">📄</div>
                                 <p className="upload-text">
-                                    <strong>Drop your PDF here</strong> or click to browse
+                                    <strong>Drop PDF, TXT, or Background Media</strong>
                                 </p>
                                 <input
                                     ref={fileInputRef}
                                     type="file"
-                                    accept=".pdf"
+                                    accept=".pdf,.txt,image/*,video/*"
                                     style={{ display: 'none' }}
                                     onChange={(e) => handleFileUpload(e.target.files[0])}
                                 />
@@ -1141,6 +1152,62 @@ export default function App() {
                                     />
                                     <span>{(masterGain * 100).toFixed(0)}%</span>
                                 </div>
+                            </div>
+
+                            {/* Atmosphere & Theme */}
+                            <div className="deck-section">
+                                <h4 className="deck-title">🎨 Atmosphere & Theme</h4>
+                                <div className="atmosphere-grid">
+                                    <div className="theme-control">
+                                        <label>Primary Color</label>
+                                        <input
+                                            type="color"
+                                            defaultValue={themeManager.theme.colors.primary}
+                                            onChange={(e) => themeManager.updateColor('primary', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="theme-control">
+                                        <label>Accent Color</label>
+                                        <input
+                                            type="color"
+                                            defaultValue={themeManager.theme.colors.accent}
+                                            onChange={(e) => themeManager.updateColor('accent', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="theme-control">
+                                        <label>Surface Color</label>
+                                        <div className="color-picker-wrapper">
+                                            <input
+                                                type="color"
+                                                defaultValue={themeManager.theme.colors.surface || '#0f172a'}
+                                                onChange={(e) => themeManager.updateColor('surface', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="theme-control wide">
+                                        <label>Backdrop Opacity</label>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="1"
+                                            step="0.05"
+                                            defaultValue={themeManager.theme.colors.backdrop_opacity}
+                                            onChange={(e) => themeManager.updateColor('backdrop_opacity', parseFloat(e.target.value))}
+                                        />
+                                    </div>
+                                    <button
+                                        className="reset-theme-btn"
+                                        onClick={() => {
+                                            themeManager.reset()
+                                            window.location.reload() // Simple way to refresh completely
+                                        }}
+                                    >
+                                        ↺ Reset Theme
+                                    </button>
+                                </div>
+                                <p className="theme-hint">
+                                    * Drag & Drop any Image or Video to set a custom background!
+                                </p>
                             </div>
 
                             {/* Sleep Mode Demo Launch */}

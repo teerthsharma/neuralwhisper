@@ -2,14 +2,53 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { processDocument } from './lib/document-processor'
 import { TTSGPUEngine } from './lib/tts-gpu-engine'
 import { VOICE_LIST, loadCustomVoices, getCustomVoices, areCustomVoicesLoaded, ALL_KOKORO_VOICES, getVoiceProfile } from './lib/voice-profiles'
-import { AudioEffects, AUDIO_PRESETS } from './lib/audio-effects'
 import { previewCache } from './lib/preview-cache'
 import { fetchWikipediaArticle, isValidWikipediaUrl } from './lib/wikipedia-scraper'
 import { VideoBackground } from './components/video-background'
+import { VoiceSelector } from './components/voice-selector'
 import { themeManager } from './lib/theme-manager'
+import { AudioEffects } from './lib/audio-effects'
 
 // Sample text for voice preview
 const PREVIEW_TEXT = "Welcome to ASMR Reader. Experience premium AI-powered whisper synthesis."
+
+const AUDIO_PRESETS = {
+    default: {
+        name: 'Default (Balanced)',
+        settings: {
+            eq: { sub: 0, bass: 0, lowMid: 0, mid: 0, highMid: 0, presence: 0, brilliance: 0 },
+            reverb: { mix: 0 }
+        }
+    },
+    crisp: {
+        name: 'Crisp & Clear',
+        settings: {
+            eq: { sub: -2, bass: -1, lowMid: -1, mid: 1, highMid: 2, presence: 3, brilliance: 4 },
+            reverb: { mix: 0.05 }
+        }
+    },
+    deep: {
+        name: 'Deep Relaxation',
+        settings: {
+            eq: { sub: 2, bass: 3, lowMid: 2, mid: 0, highMid: -1, presence: -1, brilliance: -2 },
+            reverb: { mix: 0.1 }
+        }
+    },
+    warm: {
+        name: 'Warm & Cozy',
+        settings: {
+            eq: { sub: 1, bass: 1, lowMid: 2, mid: 1, highMid: -1, presence: -2, brilliance: -3 },
+            reverb: { mix: 0.15 }
+        }
+    },
+    binaural: {
+        name: 'Binaural Space',
+        settings: {
+            eq: { sub: 0, bass: 1, lowMid: 0, mid: 0, highMid: 1, presence: 2, brilliance: 1 },
+            reverb: { mix: 0.25 }
+        }
+    }
+}
 
 export default function App() {
     // Core state
@@ -70,7 +109,6 @@ export default function App() {
     const audioRef = useRef(null)
     const canvasRef = useRef(null)
     const ttsEngineRef = useRef(null)
-    const audioEffectsRef = useRef(null)
     const audioContextRef = useRef(null)
     const sourceNodeRef = useRef(null)
     const animationRef = useRef(null)
@@ -78,6 +116,8 @@ export default function App() {
     const sleepAnalyserRef = useRef(null)
     const sleepAnimationRef = useRef(null)
     const sampleAudioRef = useRef(null) // For playing samples
+    const analyserRef = useRef(null) // Main audio analyser
+    const audioEffectsRef = useRef(null)
 
     // Initialize TTS Engine
     useEffect(() => {
@@ -123,6 +163,63 @@ export default function App() {
         audioEffectsRef.current.initialize()
     }, [])
 
+    // Waveform visualization
+    const drawWaveform = useCallback(() => {
+        if (!canvasRef.current || !audioContextRef.current) return
+
+        if (!analyserRef.current) {
+            analyserRef.current = audioContextRef.current.createAnalyser()
+            analyserRef.current.fftSize = 256
+        }
+
+        const canvas = canvasRef.current
+        const ctx = canvas.getContext('2d')
+        const analyser = analyserRef.current
+        const bufferLength = analyser.frequencyBinCount
+        const dataArray = new Uint8Array(bufferLength)
+
+        const draw = () => {
+            if (!audioRef.current || audioRef.current.paused) {
+                if (animationRef.current) cancelAnimationFrame(animationRef.current)
+                return
+            }
+            animationRef.current = requestAnimationFrame(draw)
+
+            analyser.getByteFrequencyData(dataArray)
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'
+
+            const barWidth = (canvas.width / bufferLength) * 2.5
+            let barHeight
+            let x = 0
+
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = dataArray[i] / 2
+                ctx.fillStyle = `rgba(139, 92, 246, ${barHeight / 150 + 0.5})`
+                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight)
+                x += barWidth + 1
+            }
+        }
+
+        // Connect source if needed
+        if (audioRef.current && !sourceNodeRef.current) {
+            try {
+                sourceNodeRef.current = audioContextRef.current.createMediaElementSource(audioRef.current)
+                sourceNodeRef.current.connect(analyser)
+                if (audioEffectsRef.current && audioEffectsRef.current.input) {
+                    sourceNodeRef.current.connect(audioEffectsRef.current.input)
+                } else {
+                    sourceNodeRef.current.connect(audioContextRef.current.destination)
+                }
+            } catch (e) {
+                console.warn("Failed to create media source:", e)
+            }
+        }
+
+        draw()
+    }, [isPlaying])
+
     // Format time helper
     const formatTime = (seconds) => {
         if (!seconds || isNaN(seconds)) return '0:00'
@@ -164,45 +261,9 @@ export default function App() {
         }
     }, [pitch, speed, previewingVoice, modelStatus])
 
-    // Draw waveform visualization
-    const drawWaveform = useCallback(() => {
-        if (!canvasRef.current || !audioEffectsRef.current) return
 
-        const analyser = audioContextRef.current.createAnalyser()
-        analyser.fftSize = 256
 
-        const canvas = canvasRef.current
-        const ctx = canvas.getContext('2d')
-        const bufferLength = analyser.frequencyBinCount
-        const dataArray = new Uint8Array(bufferLength)
 
-        const draw = () => {
-            animationRef.current = requestAnimationFrame(draw)
-            analyser.getByteFrequencyData(dataArray)
-
-            ctx.fillStyle = 'rgba(26, 26, 37, 0.8)'
-            ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-            const barWidth = (canvas.width / bufferLength) * 2.5
-            let x = 0
-
-            for (let i = 0; i < bufferLength; i++) {
-                const barHeight = (dataArray[i] / 255) * canvas.height * 0.8
-
-                const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight)
-                gradient.addColorStop(0, '#8b5cf6')
-                gradient.addColorStop(0.5, '#a855f7')
-                gradient.addColorStop(1, '#06b6d4')
-
-                ctx.fillStyle = gradient
-                ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight)
-
-                x += barWidth
-            }
-        }
-
-        draw()
-    }, [])
 
     // Handle file upload (PDF or Text)
     const handleFileUpload = useCallback(async (file) => {
@@ -752,7 +813,7 @@ export default function App() {
                                         disabled={isFetchingWikipedia}
                                     />
                                     <button
-                                        className={`fetch-button ${isFetchingWikipedia ? 'loading' : ''}`}
+                                        className={`fetch-button liquid-glass-btn ${isFetchingWikipedia ? 'loading' : ''}`}
                                         onClick={handleWikipediaFetch}
                                         disabled={!wikipediaUrl.trim() || isFetchingWikipedia}
                                     >
@@ -1233,7 +1294,7 @@ export default function App() {
 
                     {/* Generate Button */}
                     <button
-                        className={`generate-button ${isGenerating ? 'loading' : ''}`}
+                        className={`generate-button liquid-glass-btn ${isGenerating ? 'loading' : ''}`}
                         onClick={handleGenerate}
                         disabled={!pdfText.trim() || isGenerating || modelStatus !== 'ready'}
                     >

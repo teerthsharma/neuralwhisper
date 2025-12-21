@@ -4,76 +4,88 @@
  * Custom voices are loaded lazily when advanced mode is opened
  */
 
-// Built-in voice profiles (always available, lightweight)
+// Initial profiles
 export const VOICE_PROFILES = {
     // === STANDARD VOICES ===
     asian_female: {
         id: 'asian_female',
         name: 'Asian Female',
-        description: 'Soft, gentle whisper with delicate tones',
+        description: 'Delicate, whisper-soft tones with high clarity.',
         emoji: '🌸',
         kokoroVoice: 'af_bella',
         defaultPitch: 1.1,
         defaultSpeed: 0.8,
-        characteristics: { warmth: 0.7, breathiness: 0.8, clarity: 0.9 }
+        characteristics: { warmth: 0.7, breathiness: 0.8, clarity: 0.9 },
+        recommendedFor: 'Bedtime Stories, Soft Spoken, Meditation',
+        tags: ['Soft', 'Gentle', 'High Clarity']
     },
     american_casual: {
         id: 'american_casual',
         name: 'American Casual',
-        description: 'Relaxed, friendly conversational tone',
+        description: 'Warm, friendly, and grounded. Perfect for long-form reading.',
         emoji: '🎧',
         kokoroVoice: 'af_sarah',
         defaultPitch: 1.0,
         defaultSpeed: 0.85,
-        characteristics: { warmth: 0.8, breathiness: 0.6, clarity: 0.85 }
+        characteristics: { warmth: 0.8, breathiness: 0.6, clarity: 0.85 },
+        recommendedFor: 'Audiobooks, Casual Reading, Study Aid',
+        tags: ['Neutral', 'Friendly', 'Versatile']
     },
     russian_highclass: {
         id: 'russian_highclass',
         name: 'Russian Elegance',
-        description: 'Refined, sophisticated whisper',
+        description: 'Sophisticated, precise articulation with a cool tone.',
         emoji: '✨',
         kokoroVoice: 'af_nicole',
         defaultPitch: 0.95,
         defaultSpeed: 0.75,
-        characteristics: { warmth: 0.6, breathiness: 0.7, clarity: 0.95 }
+        characteristics: { warmth: 0.6, breathiness: 0.7, clarity: 0.95 },
+        recommendedFor: 'Poetry, Noir Narratives, Focus',
+        tags: ['Elegant', 'Precise', 'Cool']
     },
     male_deep: {
         id: 'male_deep',
         name: 'Deep Male',
-        description: 'Calm, soothing baritone',
+        description: 'Resonant baritone that grounds the listener.',
         emoji: '🎙️',
         kokoroVoice: 'am_adam',
         defaultPitch: 0.85,
         defaultSpeed: 0.8,
-        characteristics: { warmth: 0.9, breathiness: 0.5, clarity: 0.8 }
+        characteristics: { warmth: 0.9, breathiness: 0.5, clarity: 0.8 },
+        recommendedFor: 'Sleep Aid, Affirmations, Horror',
+        tags: ['Deep', 'Resonant', 'Calming']
     },
 
     // === NEURAL MODES (ASMR / PODCAST) ===
     asmr_soft: {
         id: 'asmr_soft',
         name: 'ASMR Soft Trigger',
-        description: 'Super-close, breathy, binaural-ready',
+        description: 'Binaural-optimised whispering with enhanced breath details.',
         emoji: '🤫',
-        kokoroVoice: 'af_bella', // Bella is naturally soft
-        defaultPitch: 1.05, // Slightly higher for "cute" whisper or 0.9 for deep
-        defaultSpeed: 0.7, // Very slow
-        mode: 'asmr', // Used by engine to trigger DSP
-        characteristics: { warmth: 0.9, breathiness: 1.0, clarity: 0.6 }
+        kokoroVoice: 'af_bella',
+        defaultPitch: 1.05,
+        defaultSpeed: 0.7,
+        mode: 'asmr',
+        characteristics: { warmth: 0.9, breathiness: 1.0, clarity: 0.6 },
+        recommendedFor: 'Tingles, Trigger Words, Deep Sleep',
+        tags: ['Binaural', 'Whisper', 'Intimate', 'Pro']
     },
     podcast_host: {
         id: 'podcast_host',
         name: 'Podcast Host',
-        description: 'Energetic, broadcast-quality compression',
+        description: 'Broadcast-compressed, punchy, and confident audio.',
         emoji: '📻',
         kokoroVoice: 'am_michael',
         defaultPitch: 1.0,
-        defaultSpeed: 1.05, // Slightly faster
+        defaultSpeed: 1.05,
         mode: 'podcast',
-        characteristics: { warmth: 0.5, breathiness: 0.2, clarity: 1.0 }
+        characteristics: { warmth: 0.5, breathiness: 0.2, clarity: 1.0 },
+        recommendedFor: 'News, Articles, Fast Information',
+        tags: ['Punchy', 'Broadcast', 'Fast']
     }
 }
 
-export const VOICE_LIST = Object.values(VOICE_PROFILES)
+
 
 /**
  * FIXED: Get Voice Profile logic
@@ -229,3 +241,28 @@ export const ALL_KOKORO_VOICES = [
     { id: 'bm_lewis', name: 'Lewis (BM)', gender: 'male', accent: 'british' },
     { id: 'bm_oliver', name: 'Oliver (BM)', gender: 'male', accent: 'british' },
 ]
+
+// GENERATE PROFILES FOR ALL REMAINING FACES
+ALL_KOKORO_VOICES.forEach(voice => {
+    // If this Kokoro ID isn't used as the *primary* kokoroVoice in any existing profile, add it
+    const isUsed = Object.values(VOICE_PROFILES).some(p => p.kokoroVoice === voice.id && !p.isRaw)
+
+    if (!isUsed) {
+        const id = voice.id
+        VOICE_PROFILES[id] = {
+            id: id,
+            name: voice.name,
+            description: `Standard ${voice.accent} ${voice.gender} voice model.`,
+            emoji: voice.gender === 'female' ? '👩' : '👨',
+            kokoroVoice: id,
+            defaultPitch: 1.0,
+            defaultSpeed: 1.0,
+            characteristics: { warmth: 0.5, breathiness: 0.5, clarity: 0.8 },
+            tags: ['Standard', voice.accent, voice.gender],
+            isRaw: true
+        }
+    }
+})
+
+// Update List
+export const VOICE_LIST = Object.values(VOICE_PROFILES)

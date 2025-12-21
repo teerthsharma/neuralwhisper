@@ -8,9 +8,19 @@
   --bg-secondary: color-mix(in srgb, var(--zen-surface, #0a0a0f), white 5%);
   --bg-tertiary: color-mix(in srgb, var(--zen-surface, #0a0a0f), white 10%);
 
-  /* Dynamic Glass based on surface */
-  --bg-glass: color-mix(in srgb, var(--zen-surface, #1a1a25), transparent 30%);
-  --bg-glass-hover: color-mix(in srgb, var(--zen-surface, #242434), transparent 20%);
+  /* Dynamic Glass based on surface - LIQUID EFFECT */
+  --bg-glass: color-mix(in srgb, var(--zen-surface, #1a1a25), transparent 40%);
+  --bg-glass-heavy: color-mix(in srgb, var(--zen-surface, #1a1a25), transparent 20%);
+  --bg-glass-hover: color-mix(in srgb, var(--zen-surface, #242434), transparent 30%);
+  /* Dynamic Glass based on surface - LIQUID EFFECT */
+  --bg-glass: color-mix(in srgb, var(--zen-surface, #1a1a25), transparent 40%);
+  --bg-glass-heavy: color-mix(in srgb, var(--zen-surface, #1a1a25), transparent 20%);
+  --bg-glass-hover: color-mix(in srgb, var(--zen-surface, #242434), transparent 30%);
+  --glass-blur: blur(16px) saturate(180%);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+
+  /* Soothing Animations */
+  --animate-breathe: breathe 8s ease-in-out infinite;
 
   --accent-primary: var(--zen-primary, #8b5cf6);
   --accent-secondary: var(--zen-accent, #a78bfa);
@@ -62,13 +72,30 @@ html {
   scroll-behavior: smooth;
 }
 
+@keyframes breathe {
+
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+
+  50% {
+    transform: scale(1.02);
+    filter: brightness(1.1);
+  }
+}
+
 body {
+  margin: 0;
   font-family: var(--font-body);
-  background: var(--bg-primary);
+  background-color: var(--bg-primary);
   color: var(--text-primary);
   line-height: 1.6;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+  transition: background-color 0.5s ease;
 
   /* Animated gradient background */
   background-image:
@@ -168,10 +195,13 @@ h3 {
 }
 
 /* Glass Card */
+/* Glass Card - Liquid Style */
 .glass-card {
   background: var(--bg-glass);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
   border-radius: var(--radius-lg);
   padding: 1.5rem;
   transition: var(--transition-smooth);
@@ -179,8 +209,9 @@ h3 {
 
 .glass-card:hover {
   background: var(--bg-glass-hover);
-  border-color: var(--border-glow);
-  box-shadow: var(--shadow-glow);
+  border-color: var(--accent-glow);
+  box-shadow: 0 8px 32px 0 rgba(139, 92, 246, 0.15);
+  transform: translateY(-2px);
 }
 
 /* PDF Upload Zone */
@@ -566,6 +597,68 @@ h3 {
   background: var(--accent-primary);
 }
 
+/* Liquid Glass Button */
+.liquid-glass-btn {
+  position: relative;
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border-radius: 100px;
+  /* Pill shape */
+  padding: 1rem 2.5rem;
+  color: white;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.1rem;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+
+  /* Optical Depth & Edge Highlighting */
+  box-shadow:
+    /* Soft outer shadow for lift */
+    0 10px 20px -5px rgba(0, 0, 0, 0.3),
+    /* Inner top-left highlight (sharp) */
+    inset 1px 1px 1px 0 rgba(255, 255, 255, 0.4),
+    /* Inner bottom-right shadow (soft) */
+    inset -1px -1px 2px 0 rgba(0, 0, 0, 0.2),
+    /* Subtle glow */
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.liquid-glass-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 100px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.05) 100%);
+  z-index: -1;
+  opacity: 0.5;
+  transition: opacity 0.3s ease;
+}
+
+.liquid-glass-btn:hover {
+  transform: translateY(-2px) scale(1.02);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 15px 30px -5px rgba(0, 0, 0, 0.4),
+    inset 1px 1px 0 0 rgba(255, 255, 255, 0.6),
+    inset -1px -1px 2px 0 rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(139, 92, 246, 0.3);
+  /* Purple ambient glow */
+}
+
+.liquid-glass-btn:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow:
+    0 5px 10px -2px rgba(0, 0, 0, 0.3),
+    inset 2px 2px 5px 0 rgba(0, 0, 0, 0.2);
+}
+
 /* Animations */
 @keyframes fadeIn {
   from {
@@ -799,8 +892,9 @@ h3 {
 
 .preset-btn {
   padding: 0.5rem 0.75rem;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: 0.75rem;
@@ -811,9 +905,10 @@ h3 {
 
 .preset-btn:hover,
 .preset-btn.active {
-  border-color: var(--accent-primary);
   background: var(--accent-gradient);
+  border-color: transparent;
   color: white;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
 /* Atmosphere & Theme Controls */
@@ -1492,16 +1587,18 @@ input[type="color"]::-webkit-color-swatch {
   font-weight: 600;
   cursor: pointer;
   transition: var(--transition-spring);
-  box-shadow: var(--shadow-glow);
+  box-shadow: 0 4px 15px var(--accent-glow);
   display: flex;
   align-items: center;
   gap: 0.5rem;
   white-space: nowrap;
+  backdrop-filter: blur(4px);
 }
 
 .fetch-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md), var(--shadow-glow);
+  box-shadow: 0 8px 20px var(--accent-glow);
+  filter: brightness(1.1);
 }
 
 .fetch-button:disabled {

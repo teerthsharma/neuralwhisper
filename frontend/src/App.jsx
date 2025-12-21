@@ -281,6 +281,13 @@ export default function App() {
                 speed
             })
 
+            // Handle WebSpeech fallback - audio already played through browser
+            if (result.wasWebSpeech && result.alreadyPlayed) {
+                console.log('[App] Preview used WebSpeech fallback (direct playback)')
+                setPreviewingVoice(null)
+                return
+            }
+
             if (audioRef.current && previewingVoice === voice.id) {
                 const url = URL.createObjectURL(result.blob)
                 audioRef.current.src = url
@@ -289,6 +296,7 @@ export default function App() {
             }
         } catch (err) {
             console.error('Preview failed:', err)
+            alert('Voice preview failed: ' + err.message)
             setPreviewingVoice(null)
         }
     }, [pitch, speed, previewingVoice, modelStatus])
@@ -420,6 +428,15 @@ export default function App() {
                 onChunkProgress: (p) => setGenerateProgress(p * 100)
             })
 
+            // Handle WebSpeech fallback - audio already played through browser
+            if (result.wasWebSpeech && result.alreadyPlayed) {
+                console.log('[App] Used WebSpeech fallback (direct playback)')
+                setAudioReady(false) // No downloadable audio available
+                setIsGenerating(false)
+                alert('Audio played through WebSpeech API. Neural model unavailable - audio cannot be saved.')
+                return
+            }
+
             // Cache the result
             await previewCache.set(pdfText, cacheKey, result.blob, result.duration)
 
@@ -434,7 +451,7 @@ export default function App() {
             setAudioReady(true)
         } catch (error) {
             console.error('TTS generation failed:', error)
-            alert('Audio generation failed. Please try again.')
+            alert('Audio generation failed: ' + error.message)
         } finally {
             setIsGenerating(false)
         }
@@ -1179,7 +1196,7 @@ export default function App() {
 
                                 {/* Compressor */}
                                 <div className="deck-section">
-                                    <h4 className="deck-title">🔊 Compressor</h4>
+                                    <h4 className="deck-title">🔊 Dynamics Compressor</h4>
                                     <div className="comp-grid">
                                         <div className="comp-control">
                                             <label>Threshold</label>
@@ -1188,7 +1205,11 @@ export default function App() {
                                                 min="-60"
                                                 max="0"
                                                 value={compSettings.threshold}
-                                                onChange={(e) => setCompSettings(p => ({ ...p, threshold: +e.target.value }))}
+                                                onChange={(e) => {
+                                                    const val = +e.target.value
+                                                    setCompSettings(p => ({ ...p, threshold: val }))
+                                                    audioEffectsRef.current?.setCompressor(val, compSettings.ratio, compSettings.attack, compSettings.release)
+                                                }}
                                             />
                                             <span>{compSettings.threshold}dB</span>
                                         </div>
@@ -1198,11 +1219,66 @@ export default function App() {
                                                 type="range"
                                                 min="1"
                                                 max="20"
+                                                step="0.5"
                                                 value={compSettings.ratio}
-                                                onChange={(e) => setCompSettings(p => ({ ...p, ratio: +e.target.value }))}
+                                                onChange={(e) => {
+                                                    const val = +e.target.value
+                                                    setCompSettings(p => ({ ...p, ratio: val }))
+                                                    audioEffectsRef.current?.setCompressor(compSettings.threshold, val, compSettings.attack, compSettings.release)
+                                                }}
                                             />
                                             <span>{compSettings.ratio}:1</span>
                                         </div>
+                                        <div className="comp-control">
+                                            <label>Attack</label>
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="100"
+                                                value={compSettings.attack}
+                                                onChange={(e) => {
+                                                    const val = +e.target.value
+                                                    setCompSettings(p => ({ ...p, attack: val }))
+                                                    audioEffectsRef.current?.setCompressor(compSettings.threshold, compSettings.ratio, val, compSettings.release)
+                                                }}
+                                            />
+                                            <span>{compSettings.attack}ms</span>
+                                        </div>
+                                        <div className="comp-control">
+                                            <label>Release</label>
+                                            <input
+                                                type="range"
+                                                min="10"
+                                                max="1000"
+                                                step="10"
+                                                value={compSettings.release}
+                                                onChange={(e) => {
+                                                    const val = +e.target.value
+                                                    setCompSettings(p => ({ ...p, release: val }))
+                                                    audioEffectsRef.current?.setCompressor(compSettings.threshold, compSettings.ratio, compSettings.attack, val)
+                                                }}
+                                            />
+                                            <span>{compSettings.release}ms</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Limiter */}
+                                <div className="deck-section">
+                                    <h4 className="deck-title">🛡️ Output Limiter</h4>
+                                    <div className="limiter-control">
+                                        <label>Ceiling</label>
+                                        <input
+                                            type="range"
+                                            min="-6"
+                                            max="0"
+                                            step="0.5"
+                                            defaultValue="-1"
+                                            onChange={(e) => {
+                                                audioEffectsRef.current?.setLimiterCeiling(+e.target.value)
+                                            }}
+                                        />
+                                        <span className="limiter-hint">Brickwall protection</span>
                                     </div>
                                 </div>
 

@@ -13,6 +13,21 @@ import * as pdfjsLib from 'pdfjs-dist'
 const PDF_WORKER_URL = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
 pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL
 
+// ============================================================================
+// FILE SIZE LIMITS (Producer-grade protection)
+// ============================================================================
+const MAX_PDF_SIZE = 20 * 1024 * 1024; // 20 MB
+const MAX_TXT_SIZE = 5 * 1024 * 1024;  // 5 MB
+
+/**
+ * Format bytes to human-readable string
+ */
+function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 /**
  * Main Entry Point: Process any file
  * @param {File} file - PDF or Text file
@@ -21,9 +36,29 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL
 export async function processDocument(file) {
     console.log(`🧠 [DOC] Processing ${file.name} (${file.type})...`);
 
+    // ========== FILE SIZE VALIDATION ==========
+    const isPDF = file.type === 'application/pdf';
+    const maxSize = isPDF ? MAX_PDF_SIZE : MAX_TXT_SIZE;
+    const fileTypeLabel = isPDF ? 'PDF' : 'Text';
+
+    if (file.size > maxSize) {
+        const error = new Error(
+            `${fileTypeLabel} file too large: ${formatBytes(file.size)}. ` +
+            `Maximum allowed: ${formatBytes(maxSize)}. ` +
+            `Please use a smaller file or split into multiple parts.`
+        );
+        error.code = 'FILE_TOO_LARGE';
+        error.details = {
+            actual: file.size,
+            max: maxSize,
+            type: fileTypeLabel
+        };
+        throw error;
+    }
+
     let rawText = '';
 
-    if (file.type === 'application/pdf') {
+    if (isPDF) {
         rawText = await extractTextFromPDF(file);
     } else {
         rawText = await extractTextFromTXT(file);
@@ -40,7 +75,8 @@ export async function processDocument(file) {
         meta: {
             filename: file.name,
             totalChars: rawText.length,
-            totalSegments: segments.length
+            totalSegments: segments.length,
+            fileSize: file.size
         }
     };
 }

@@ -128,6 +128,77 @@ export class AudioEffects {
         }
     }
 
+    // ===============================================================
+    // PRODUCER-GRADE COMPRESSOR CONTROLS
+    // ===============================================================
+
+    /**
+     * Set compressor parameters
+     * @param {number} threshold - Threshold in dB (-60 to 0)
+     * @param {number} ratio - Compression ratio (1 to 20)
+     * @param {number} attack - Attack time in ms (1 to 100)
+     * @param {number} release - Release time in ms (10 to 1000)
+     */
+    setCompressor(threshold, ratio, attack, release) {
+        if (!this.compressor) return
+
+        const now = this.ctx.currentTime
+
+        // Clamp values to valid ranges
+        this.compressor.threshold.setTargetAtTime(Math.max(-60, Math.min(0, threshold)), now, 0.05)
+        this.compressor.ratio.setTargetAtTime(Math.max(1, Math.min(20, ratio)), now, 0.05)
+        this.compressor.attack.setTargetAtTime(Math.max(0.001, Math.min(0.1, attack / 1000)), now, 0.05)
+        this.compressor.release.setTargetAtTime(Math.max(0.01, Math.min(1, release / 1000)), now, 0.05)
+
+        console.log(`[AudioEffects] Compressor: ${threshold}dB, ${ratio}:1, ${attack}ms attack, ${release}ms release`)
+    }
+
+    /**
+     * Get compressor gain reduction (for metering)
+     */
+    getCompressorReduction() {
+        return this.compressor ? this.compressor.reduction : 0
+    }
+
+    // ===============================================================
+    // LIMITER (Brickwall output protection)
+    // ===============================================================
+
+    /**
+     * Initialize output limiter (call after initialize())
+     */
+    initLimiter() {
+        if (!this.ctx || this.limiter) return
+
+        this.limiter = this.ctx.createDynamicsCompressor()
+        this.limiter.threshold.value = -1 // Very high threshold
+        this.limiter.knee.value = 0       // Hard knee for brickwall
+        this.limiter.ratio.value = 20     // Maximum ratio
+        this.limiter.attack.value = 0.001 // Instant attack
+        this.limiter.release.value = 0.1  // Fast release
+
+        // Reconnect: Master -> Limiter -> Destination
+        this.masterGain.disconnect()
+        this.masterGain.connect(this.limiter)
+        this.limiter.connect(this.ctx.destination)
+
+        console.log('[AudioEffects] Brickwall limiter initialized')
+    }
+
+    /**
+     * Set limiter ceiling
+     * @param {number} ceiling - Output ceiling in dB (-6 to 0)
+     */
+    setLimiterCeiling(ceiling) {
+        if (!this.limiter) {
+            this.initLimiter()
+        }
+        if (this.limiter) {
+            this.limiter.threshold.setTargetAtTime(Math.max(-6, Math.min(0, ceiling)), this.ctx.currentTime, 0.05)
+            console.log(`[AudioEffects] Limiter ceiling: ${ceiling}dB`)
+        }
+    }
+
     setStereoWidth(width) {
         // Web Audio API doesn't have a direct "Width" node without complex M/S matrixing.
         // For simplicity, we'll map extreme width to panning or just placeholder.
@@ -159,6 +230,13 @@ export class AudioEffects {
         }
         if (settings.reverb) {
             this.setReverbMix(settings.reverb.mix)
+        }
+        if (settings.compressor) {
+            const c = settings.compressor
+            this.setCompressor(c.threshold || -24, c.ratio || 4, c.attack || 3, c.release || 250)
+        }
+        if (settings.limiter) {
+            this.setLimiterCeiling(settings.limiter.ceiling || -1)
         }
     }
 }

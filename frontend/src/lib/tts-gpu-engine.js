@@ -337,6 +337,14 @@ export class TTSGPUEngine {
     }
 
     /**
+     * Preview generation (alias for synthesize for now, might optimize later)
+     */
+    async generatePreview(text, options) {
+        console.log('[TTS] Generating Preview...')
+        return this.synthesize(text, options)
+    }
+
+    /**
      * Preprocess text for better prosody based on mode
      */
     _preprocessText(text, mode) {
@@ -381,21 +389,74 @@ export class TTSGPUEngine {
         return source
     }
 
-    // ... WebSpeech Fallback (Simplified) ...
+    /**
+     * WebSpeech Fallback - Generates audio using browser's Speech Synthesis API
+     * CRITICAL: This must produce actual audio, not empty blobs!
+     */
     async _synthesizeWebSpeech(text, { voiceId, pitch, speed }) {
-        // ... existing fallback code but using new pitch/speed ...
-        return new Promise((resolve) => {
-            // Mock result for now, actual implementation would be similar to before
-            // but mapped to updated params
-            resolve({ blob: new Blob([], { type: 'audio/wav' }), duration: 1 })
+        return new Promise((resolve, reject) => {
+            if (!window.speechSynthesis) {
+                console.error('[TTS] Web Speech API not available')
+                reject(new Error('Web Speech API not available'))
+                return
+            }
+
+            // Create utterance
+            const utterance = new SpeechSynthesisUtterance(text)
+            utterance.pitch = pitch || 1.0
+            utterance.rate = speed || 0.85
+
+            // Try to find a good voice
+            const voices = window.speechSynthesis.getVoices()
+            if (voices.length > 0) {
+                // Prefer high-quality English voices
+                const preferredVoice = voices.find(v =>
+                    v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Premium'))
+                ) || voices.find(v => v.lang.startsWith('en')) || voices[0]
+                utterance.voice = preferredVoice
+            }
+
+            // IMPORTANT: Web Speech API cannot be recorded directly to a blob
+            // We must synthesize using AudioContext with oscillator simulation as fallback
+            // OR inform user that WebSpeech fallback plays directly without blob export
+
+            // For now, use direct playback for WebSpeech (can't capture to WAV)
+            const startTime = Date.now()
+
+            utterance.onend = () => {
+                const duration = (Date.now() - startTime) / 1000
+                console.log('[TTS] WebSpeech playback completed, duration:', duration)
+                // Return a marker blob indicating WebSpeech was used (for UI purposes)
+                // The audio already played through the browser
+                resolve({
+                    blob: new Blob(['WEBSPEECH_DIRECT'], { type: 'text/plain' }),
+                    duration: duration,
+                    wasWebSpeech: true,
+                    alreadyPlayed: true
+                })
+            }
+
+            utterance.onerror = (event) => {
+                console.error('[TTS] WebSpeech error:', event.error)
+                reject(new Error(`WebSpeech synthesis failed: ${event.error}`))
+            }
+
+            // Cancel any existing speech and start new
+            window.speechSynthesis.cancel()
+            window.speechSynthesis.speak(utterance)
         })
     }
 
     async _synthesizeKokoroOptimized(text, { voiceId, pitch, speed, onChunkProgress }) {
         try {
             const chunks = this._splitText(text, this.CHUNK_SIZE)
+            if (!chunks.length || chunks.every(c => !c.trim())) {
+                throw new Error('[TTS] No valid text chunks to synthesize')
+            }
+
             const audioChunks = new Array(chunks.length)
             let completed = 0
+            let failedChunks = 0
 
             for (let i = 0; i < chunks.length; i += this.PARALLEL_LIMIT) {
                 const batch = chunks.slice(i, i + this.PARALLEL_LIMIT)
@@ -404,18 +465,44 @@ export class TTSGPUEngine {
                         voice: voiceId,
                         speed: speed
                     }).then(audio => {
+                        // CRITICAL: Validate audio output from Kokoro
+                        if (!audio || !audio.audio || audio.audio.length === 0) {
+                            console.error(`[TTS] Chunk ${i + idx} returned empty audio!`)
+                            failedChunks++
+                            return
+                        }
+                        // Check for white noise (all values near 0 or all same value)
+                        const sample = audio.audio.slice(0, Math.min(1000, audio.audio.length))
+                        const maxAbs = Math.max(...sample.map(Math.abs))
+                        if (maxAbs < 0.001) {
+                            console.warn(`[TTS] Chunk ${i + idx} has suspiciously low audio levels (max: ${maxAbs})`)
+                        }
                         audioChunks[i + idx] = audio
                         completed++
                         onChunkProgress?.(completed / chunks.length)
+                    }).catch(err => {
+                        console.error(`[TTS] Chunk ${i + idx} generation failed:`, err)
+                        failedChunks++
                     })
                 )
                 await Promise.all(promises)
             }
 
+            // Check if we have enough valid chunks
+            const validChunks = audioChunks.filter(c => c && c.audio && c.audio.length > 0)
+            if (validChunks.length === 0) {
+                throw new Error(`[TTS] All ${chunks.length} chunks failed to generate valid audio!`)
+            }
+            if (failedChunks > 0) {
+                console.warn(`[TTS] ${failedChunks}/${chunks.length} chunks failed, continuing with ${validChunks.length} valid chunks`)
+            }
+
             const combined = this._combineAudioChunks(audioChunks)
-            // Note: Pitch shifting would happen here if Kokoro doesn't support it natively yet
-            // For now assuming speed handles duration, pitch we might need post-process if Kokoro doesn't do it.
-            // Kokoro generates at fixed pitch usually, so we might need `_pitchShift`.
+
+            // CRITICAL: Final validation before WAV encoding
+            if (!combined.audio || combined.audio.length === 0) {
+                throw new Error('[TTS] Combined audio is empty after merging chunks!')
+            }
 
             let finalAudio = combined
             if (Math.abs(pitch - 1.0) > 0.05) {
@@ -425,7 +512,7 @@ export class TTSGPUEngine {
             return this._audioToBlob(finalAudio)
 
         } catch (e) {
-            console.error('Kokoro Gen Failed', e)
+            console.error('[TTS] Kokoro synthesis failed:', e)
             throw e
         }
     }
@@ -445,22 +532,136 @@ export class TTSGPUEngine {
     }
 
     _combineAudioChunks(chunks) {
-        if (!chunks[0]) return { audio: new Float32Array(0), sampling_rate: 24000 }
-        const total = chunks.reduce((acc, c) => acc + (c ? c.audio.length : 0), 0)
+        // Filter to only valid chunks with audio data
+        const validChunks = chunks.filter(c => c && c.audio && c.audio.length > 0)
+
+        if (validChunks.length === 0) {
+            console.error('[TTS] _combineAudioChunks: No valid chunks to combine!')
+            return { audio: new Float32Array(0), sampling_rate: 24000, isEmpty: true }
+        }
+
+        const total = validChunks.reduce((acc, c) => acc + c.audio.length, 0)
         const out = new Float32Array(total)
         let off = 0
-        chunks.forEach(c => {
-            if (c) {
-                out.set(c.audio, off)
-                off += c.audio.length
-            }
+
+        validChunks.forEach(c => {
+            out.set(c.audio, off)
+            off += c.audio.length
         })
-        return { audio: out, sampling_rate: chunks[0].sampling_rate }
+
+        console.log(`[TTS] Combined ${validChunks.length} chunks, total samples: ${total}`)
+        return { audio: out, sampling_rate: validChunks[0].sampling_rate }
+    }
+
+    /**
+     * PRODUCER-GRADE AUDIO VALIDATION & NORMALIZATION
+     * Prevents white noise by ensuring clean audio before encoding
+     */
+    _validateAndNormalizeAudio(audio) {
+        if (!audio || audio.length === 0) {
+            console.warn('[TTS] Empty audio buffer detected')
+            return new Float32Array(0)
+        }
+
+        // Create a copy to avoid mutating original
+        const processed = new Float32Array(audio.length)
+
+        // Pass 1: Validate samples and calculate DC offset
+        let sum = 0
+        let peak = 0
+        let hasInvalidSamples = false
+
+        for (let i = 0; i < audio.length; i++) {
+            let sample = audio[i]
+
+            // Check for NaN or Infinity (common white noise cause)
+            if (!Number.isFinite(sample)) {
+                hasInvalidSamples = true
+                sample = 0
+            }
+
+            processed[i] = sample
+            sum += sample
+
+            const absSample = Math.abs(sample)
+            if (absSample > peak) peak = absSample
+        }
+
+        if (hasInvalidSamples) {
+            console.warn('[TTS] ⚠️ Invalid samples (NaN/Infinity) detected and replaced with silence')
+        }
+
+        // Calculate and remove DC offset
+        const dcOffset = sum / audio.length
+        if (Math.abs(dcOffset) > 0.001) {
+            console.log(`[TTS] Removing DC offset: ${dcOffset.toFixed(4)}`)
+            for (let i = 0; i < processed.length; i++) {
+                processed[i] -= dcOffset
+            }
+            // Recalculate peak after DC removal
+            peak = 0
+            for (let i = 0; i < processed.length; i++) {
+                const absSample = Math.abs(processed[i])
+                if (absSample > peak) peak = absSample
+            }
+        }
+
+        // Check for silent audio (all zeros or near-zero)
+        if (peak < 0.001) {
+            console.warn('[TTS] Audio appears to be silent/empty')
+            return processed
+        }
+
+        // Normalize to target peak with headroom (-3dB = 0.707)
+        const targetPeak = 0.707
+        if (peak > 0 && peak !== targetPeak) {
+            const normalizeGain = targetPeak / peak
+            console.log(`[TTS] 🎚️ Normalizing audio: peak=${peak.toFixed(3)} → ${targetPeak.toFixed(3)}, gain=${normalizeGain.toFixed(2)}x`)
+
+            for (let i = 0; i < processed.length; i++) {
+                processed[i] *= normalizeGain
+            }
+        }
+
+        // Apply soft limiter to prevent any clipping (producer-grade protection)
+        let limitedSamples = 0
+        for (let i = 0; i < processed.length; i++) {
+            const sample = processed[i]
+            // Soft clip using tanh for musical limiting
+            if (Math.abs(sample) > 0.9) {
+                processed[i] = Math.tanh(sample * 1.2) * 0.95
+                limitedSamples++
+            }
+        }
+
+        if (limitedSamples > 0) {
+            console.log(`[TTS] 🔊 Soft-limited ${limitedSamples} samples to prevent clipping`)
+        }
+
+        return processed
     }
 
     async _audioToBlob(audioData) {
-        // ... (Reuse existing WAV encoding logic) ...
-        const { audio, sampling_rate } = audioData
+        const { audio: rawAudio, sampling_rate, isEmpty } = audioData
+
+        // CRITICAL VALIDATION: Prevent white noise from empty/invalid audio
+        if (!rawAudio || rawAudio.length === 0 || isEmpty) {
+            console.error('[TTS] Cannot create WAV blob from empty audio data!')
+            return { blob: new Blob([], { type: 'audio/wav' }), duration: 0 }
+        }
+
+        // ========== PRODUCER-GRADE AUDIO PROCESSING ==========
+        const audio = this._validateAndNormalizeAudio(rawAudio)
+
+        if (audio.length === 0) {
+            console.warn('[TTS] Cannot create audio blob from empty buffer after validation')
+            return { blob: new Blob([], { type: 'audio/wav' }), duration: 0 }
+        }
+
+        // Final validation
+        const maxAmplitude = Math.max(...audio.slice(0, Math.min(5000, audio.length)).map(Math.abs))
+        console.log(`[TTS] ✅ Creating WAV: ${audio.length} samples at ${sampling_rate}Hz, peak=${maxAmplitude.toFixed(3)}`)
+
         const buffer = new ArrayBuffer(44 + audio.length * 2)
         const view = new DataView(buffer)
 
@@ -480,7 +681,9 @@ export class TTSGPUEngine {
         writeString(36, 'data')
         view.setUint32(40, audio.length * 2, true)
 
+        // Convert to 16-bit PCM with proper clamping
         for (let i = 0; i < audio.length; i++) {
+            // Hard clamp to valid range (safety net after soft limiting)
             const s = Math.max(-1, Math.min(1, audio[i]))
             view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true)
         }

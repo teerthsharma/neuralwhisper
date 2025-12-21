@@ -69,21 +69,21 @@ def get_wikipedia_summary(title, sentences=15):
         return None
 
 def main():
-    print("🚀 Initializing F5-TTS for Audiobook Generation...")
+    print("Initializing F5-TTS for Audiobook Generation...")
     
     if not torch.cuda.is_available():
-        print("❌ Error: CUDA not available. This script requires a GPU.")
+        print("Error: CUDA not available. This script requires a GPU.")
         return
 
     # Check VRAM
     vram = torch.cuda.get_device_properties(0).total_memory / 1e9
-    print(f"🎮 GPU: {torch.cuda.get_device_name(0)} ({vram:.1f} GB VRAM)")
+    print(f"GPU: {torch.cuda.get_device_name(0)} ({vram:.1f} GB VRAM)")
     
     # Load F5-TTS Model
     try:
         f5tts = F5TTS() # Default init uses local config/ckpt if available or downloads
     except Exception as e:
-        print(f"❌ Failed to load model: {e}")
+        print(f"Failed to load model: {e}")
         return
 
     # Task List
@@ -109,23 +109,23 @@ def main():
     ]
 
     for task in tasks:
-        print(f"\n🎙️ Processing Audiobook: {task['title']}")
+        print(f"\nProcessing Audiobook: {task['title']}")
         
         # 1. Get Text
         text = get_wikipedia_summary(task['wiki_title'])
         if not text:
             continue
             
-        print(f"   📝 Text length: {len(text)} chars")
+        print(f"   Text length: {len(text)} chars")
         
         # 2. Get Reference Audio
         ref_audio = PROJECT_DIR / task['voice_file']
         if not ref_audio.exists():
-            print(f"   ❌ Reference audio not found: {ref_audio}")
+            print(f"   Reference audio not found: {ref_audio}")
             continue
             
         # 3. Generate Audio
-        print(f"   ⚡ Synthesizing (Optimized for 8GB VRAM)...")
+        print(f"   Synthesizing (Optimized for 8GB VRAM)...")
         try:
             # F5-TTS API handling
             wav, sr, _ = f5tts.infer(
@@ -139,15 +139,15 @@ def main():
             # 4. Save
             out_path = OUTPUT_DIR / task['output_file']
             sf.write(str(out_path), wav, sr)
-            print(f"   ✅ Saved to: {out_path}")
+            print(f"   Saved to: {out_path}")
             
             # Clear Cache to prevent VRAM formatting issues between huge tasks
             torch.cuda.empty_cache()
             
         except Exception as e:
-            print(f"   ❌ Generation failed: {e}")
+            print(f"   Generation failed: {e}")
 
-    print("\n✨ All Audiobooks Generated!")
+    print("\nAll Audiobooks Generated!")
 
 if __name__ == "__main__":
     main()

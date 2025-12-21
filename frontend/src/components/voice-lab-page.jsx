@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { VoiceAnalyzer } from '../lib/voice-analyzer'
 import { VoiceMapper } from '../lib/voice-mapper'
-import { HeavyBackground } from './heavy-background'
+import { VoiceLabBackground } from './voice-lab-background'
 
 export function VoiceLabPage({ onBack, onVoiceCreated }) {
     const [step, setStep] = useState('upload') // upload, scanning, result
@@ -11,8 +11,9 @@ export function VoiceLabPage({ onBack, onVoiceCreated }) {
     const [voiceName, setVoiceName] = useState('')
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
-    // File input
-    const fileInputRef = useRef(null)
+    // File inputs
+    const mp3InputRef = useRef(null)
+    const jsonInputRef = useRef(null)
 
     // Parallax effect
     useEffect(() => {
@@ -26,45 +27,44 @@ export function VoiceLabPage({ onBack, onVoiceCreated }) {
         return () => window.removeEventListener('mousemove', handleMouseMove)
     }, [])
 
-    const handleFileUpload = async (uploadedFile) => {
+    const handleJsonUpload = (uploadedFile) => {
         if (!uploadedFile) return
 
-        // Handle JSON Import (Voice Config)
-        if (uploadedFile.type === 'application/json' || uploadedFile.name.endsWith('.json')) {
-            const reader = new FileReader()
-            reader.onload = (e) => {
-                try {
-                    const config = JSON.parse(e.target.result)
-                    // Validate minimal structure
-                    if (config.kokoroVoice && config.characteristics) {
-                        setStep('result')
-                        setVoiceName(config.name || 'Imported Voice')
-                        setMapping({
-                            kokoroId: config.kokoroVoice,
-                            settings: {
-                                pitch: config.defaultPitch || 1.0,
-                                speed: config.defaultSpeed || 1.0
-                            }
-                        })
-                        setAnalysis({
-                            ...config.characteristics,
-                            estimated_pitch: 0 // Unknown for imported configs
-                        })
-                        // Mock file for display
-                        setFile({ name: 'Config File' })
-                    } else {
-                        alert('Invalid Voice Configuration File')
-                    }
-                } catch (err) {
-                    console.error('Failed to parse voice config', err)
-                    alert('Error reading configuration file')
+        const reader = new FileReader()
+        reader.onload = (e) => {
+            try {
+                const config = JSON.parse(e.target.result)
+                // Validate minimal structure
+                if (config.kokoroVoice && config.characteristics) {
+                    setStep('result')
+                    setVoiceName(config.name || 'Imported Voice')
+                    setMapping({
+                        kokoroId: config.kokoroVoice,
+                        settings: {
+                            pitch: config.defaultPitch || 1.0,
+                            speed: config.defaultSpeed || 1.0
+                        }
+                    })
+                    setAnalysis({
+                        ...config.characteristics,
+                        estimated_pitch: 0 // Unknown for imported configs
+                    })
+                    // Mock file for display
+                    setFile({ name: 'Config File' })
+                } else {
+                    alert('Invalid Voice Configuration File')
                 }
+            } catch (err) {
+                console.error('Failed to parse voice config', err)
+                alert('Error reading configuration file')
             }
-            reader.readAsText(uploadedFile)
-            return
         }
+        reader.readAsText(uploadedFile)
+    }
 
-        // Handle Audio Analysis
+    const handleMp3Upload = async (uploadedFile) => {
+        if (!uploadedFile) return
+
         setFile(uploadedFile)
         setVoiceName(uploadedFile.name.replace(/\.[^/.]+$/, ""))
         setStep('scanning')
@@ -143,8 +143,8 @@ export function VoiceLabPage({ onBack, onVoiceCreated }) {
 
     return (
         <div className="relative min-h-screen w-full overflow-hidden text-white font-mono selection:bg-cyan-500/30">
-            {/* Background */}
-            <HeavyBackground />
+            {/* Super Graphics Background */}
+            <VoiceLabBackground />
 
             {/* HUD Overlay with Parallax */}
             <div
@@ -156,14 +156,14 @@ export function VoiceLabPage({ onBack, onVoiceCreated }) {
                 <div className="flex justify-between items-start pointer-events-auto">
                     <div className="flex flex-col group">
                         <h1 className="text-5xl font-bold tracking-tighter uppercase mb-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">
-                            Voice Lab <span className="text-cyan-400 text-sm align-top opacity-0 group-hover:opacity-100 transition-opacity duration-300">BETA</span>
+                            Voice Lab <span className="text-cyan-400 text-sm align-top opacity-0 group-hover:opacity-100 transition-opacity duration-300">GPU</span>
                         </h1>
                         <div className="flex gap-4 text-[10px] text-cyan-300/60 uppercase tracking-widest font-semibold">
                             <span className="flex items-center gap-1"><span className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></span> Sys: Online</span>
                             <span className="text-white/20">|</span>
-                            <span>GPU: Neural Matrix Active</span>
+                            <span>GPU: Unhinged Mode</span>
                             <span className="text-white/20">|</span>
-                            <span>Mem: Optimized</span>
+                            <span>Renderer: WebGL 2.0</span>
                         </div>
                     </div>
                     <button
@@ -181,40 +181,64 @@ export function VoiceLabPage({ onBack, onVoiceCreated }) {
                 <div className="flex-1 flex items-center justify-center pointer-events-auto perspective-[1000px]">
 
                     {step === 'upload' && (
-                        <div
-                            className="w-[640px] h-[420px] relative group cursor-pointer transition-all duration-500 hover:scale-[1.02] transform-gpu preserve-3d"
-                            onClick={() => fileInputRef.current?.click()}
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={(e) => { e.preventDefault(); handleFileUpload(e.dataTransfer.files[0]); }}
-                        >
-                            {/* Glass Panel */}
-                            <div className="absolute inset-0 bg-black/20 backdrop-blur-md border border-white/5 group-hover:bg-black/30 transition-colors shadow-2xl"></div>
+                        <div className="flex gap-10 items-stretch h-[420px]">
 
-                            {/* Animated Borders */}
-                            <div className="absolute top-0 left-0 w-32 h-[1px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent group-hover:w-full transition-all duration-700"></div>
-                            <div className="absolute bottom-0 right-0 w-32 h-[1px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent group-hover:w-full transition-all duration-700"></div>
-                            <div className="absolute top-0 right-0 w-[1px] h-32 bg-gradient-to-b from-transparent via-cyan-500 to-transparent group-hover:h-full transition-all duration-700"></div>
-                            <div className="absolute bottom-0 left-0 w-[1px] h-32 bg-gradient-to-b from-transparent via-cyan-500 to-transparent group-hover:h-full transition-all duration-700"></div>
-
-                            {/* Corner Accents */}
-                            <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-cyan-400"></div>
-                            <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-cyan-400"></div>
-                            <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-cyan-400"></div>
-                            <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-cyan-400"></div>
-
-                            <input type="file" ref={fileInputRef} className="hidden" accept="audio/*,.json" onChange={(e) => handleFileUpload(e.target.files[0])} />
-
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-12">
-                                <div className="text-7xl mb-8 text-white/10 group-hover:text-cyan-400 group-hover:scale-110 group-hover:rotate-[360deg] transition-all duration-1000 ease-out">
-                                    ⌬
+                            {/* Card 1: JSON Import */}
+                            <div
+                                className="w-[380px] relative group cursor-pointer transition-all duration-500 hover:scale-[1.02] hover:-translate-y-2 transform-gpu preserve-3d"
+                                onClick={() => jsonInputRef.current?.click()}
+                            >
+                                <div className="absolute inset-0 bg-black/30 backdrop-blur-md border border-white/5 group-hover:bg-cyan-950/30 transition-colors shadow-2xl rounded-xl overflow-hidden">
+                                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                 </div>
-                                <h2 className="text-3xl font-bold uppercase tracking-[0.2em] mb-3 text-white drop-shadow-md">Initialize Identity</h2>
-                                <p className="text-sm text-cyan-200/60 max-w-sm font-light leading-relaxed">
-                                    Upload voice audio <span className="text-cyan-400">(.mp3)</span> to analyze<br />
-                                    or drop an Identity Config <span className="text-cyan-400">(.json)</span> to clone.
-                                </p>
-                                <div className="mt-10 px-6 py-2 bg-cyan-500/5 border border-cyan-500/20 rounded-full text-[10px] uppercase tracking-widest text-cyan-300 group-hover:bg-cyan-500/20 transition-colors">
-                                    Initiate Sequence
+
+                                <input type="file" ref={jsonInputRef} className="hidden" accept=".json" onChange={(e) => handleJsonUpload(e.target.files[0])} />
+
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-8">
+                                    <div className="text-6xl mb-6 text-white/20 group-hover:text-purple-400 group-hover:scale-110 transition-all duration-500 ease-out">
+                                        💾
+                                    </div>
+                                    <h2 className="text-2xl font-bold uppercase tracking-[0.2em] mb-2 text-white drop-shadow-md group-hover:text-purple-200">Load Profile</h2>
+                                    <div className="w-12 h-[2px] bg-purple-500/50 mb-4"></div>
+                                    <p className="text-xs text-cyan-200/50 max-w-[200px] leading-relaxed">
+                                        Import existing voice configuration via <span className="text-purple-400 font-bold">JSON</span>.
+                                    </p>
+                                    <div className="mt-8 px-6 py-2 border border-purple-500/30 rounded-full text-[10px] uppercase tracking-widest text-purple-300 group-hover:bg-purple-500/20 transition-all">
+                                        Select File
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Divider with OR */}
+                            <div className="flex flex-col items-center justify-center">
+                                <div className="h-full w-[1px] bg-gradient-to-b from-transparent via-white/10 to-transparent"></div>
+                                <div className="py-4 text-xs font-bold text-white/30 uppercase tracking-widest bg-black/50 backdrop-blur-xl rounded p-2 border border-white/5 z-10 my-2">OR</div>
+                                <div className="h-full w-[1px] bg-gradient-to-b from-transparent via-white/10 to-transparent"></div>
+                            </div>
+
+                            {/* Card 2: MP3 Analysis */}
+                            <div
+                                className="w-[380px] relative group cursor-pointer transition-all duration-500 hover:scale-[1.02] hover:-translate-y-2 transform-gpu preserve-3d"
+                                onClick={() => mp3InputRef.current?.click()}
+                            >
+                                <div className="absolute inset-0 bg-black/30 backdrop-blur-md border border-white/5 group-hover:bg-cyan-950/30 transition-colors shadow-2xl rounded-xl overflow-hidden">
+                                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                </div>
+
+                                <input type="file" ref={mp3InputRef} className="hidden" accept="audio/*" onChange={(e) => handleMp3Upload(e.target.files[0])} />
+
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-8">
+                                    <div className="text-6xl mb-6 text-white/20 group-hover:text-cyan-400 group-hover:rotate-[360deg] transition-all duration-1000 ease-out">
+                                        🧬
+                                    </div>
+                                    <h2 className="text-2xl font-bold uppercase tracking-[0.2em] mb-2 text-white drop-shadow-md group-hover:text-cyan-200">Neural Clone</h2>
+                                    <div className="w-12 h-[2px] bg-cyan-500/50 mb-4"></div>
+                                    <p className="text-xs text-cyan-200/50 max-w-[200px] leading-relaxed">
+                                        Analyze audio samples to extract vocal identity from <span className="text-cyan-400 font-bold">MP3/WAV</span>.
+                                    </p>
+                                    <div className="mt-8 px-6 py-2 border border-cyan-500/30 rounded-full text-[10px] uppercase tracking-widest text-cyan-300 group-hover:bg-cyan-500/20 transition-all">
+                                        Initiate Scan
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -254,7 +278,7 @@ export function VoiceLabPage({ onBack, onVoiceCreated }) {
 
                             {/* Left: Input Stats Card */}
                             <div className="space-y-6 transform transition-transform hover:translate-z-10 preserve-3d">
-                                <div className="p-8 border-l-2 border-cyan-500/30 bg-gradient-to-r from-cyan-950/20 to-transparent backdrop-blur-sm relative overflow-hidden shadow-2xl">
+                                <div className="p-8 border-l-2 border-cyan-500/30 bg-gradient-to-r from-cyan-950/20 to-transparent backdrop-blur-sm relative overflow-hidden shadow-2xl rounded-r-xl">
                                     <div className="absolute top-0 right-0 p-2 text-cyan-500/20 text-6xl font-bold opacity-20 -rotate-12 select-none">DATA</div>
 
                                     <div className="text-[10px] uppercase tracking-[0.3em] text-cyan-400 mb-4 font-bold">Bio-Metric Analysis</div>
@@ -288,7 +312,7 @@ export function VoiceLabPage({ onBack, onVoiceCreated }) {
                                     </div>
                                 </div>
 
-                                <div className="p-8 border-l-2 border-white/10 bg-black/20 backdrop-blur-sm">
+                                <div className="p-8 border-l-2 border-white/10 bg-black/20 backdrop-blur-sm rounded-r-xl">
                                     <div className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-3">Identity Designation</div>
                                     <input
                                         type="text"
@@ -305,7 +329,7 @@ export function VoiceLabPage({ onBack, onVoiceCreated }) {
                                 {/* Holographic Glow */}
                                 <div className="absolute -inset-1 bg-gradient-to-b from-cyan-500 to-blue-600 rounded-lg blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
 
-                                <div className="relative border border-white/10 bg-black/80 backdrop-blur-xl p-10 flex flex-col items-center text-center shadow-2xl">
+                                <div className="relative border border-white/10 bg-black/80 backdrop-blur-xl p-10 flex flex-col items-center text-center shadow-2xl rounded-2xl">
                                     {/* Card Pattern */}
                                     <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 mix-blend-overlay"></div>
                                     <div className="absolute top-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>
@@ -323,20 +347,20 @@ export function VoiceLabPage({ onBack, onVoiceCreated }) {
                                         <div className="flex gap-3">
                                             <button
                                                 onClick={() => setStep('upload')}
-                                                className="flex-1 py-4 border border-white/10 hover:bg-white/5 uppercase text-[10px] tracking-[0.2em] transition-colors"
+                                                className="flex-1 py-4 border border-white/10 hover:bg-white/5 uppercase text-[10px] tracking-[0.2em] transition-colors rounded-lg"
                                             >
                                                 Discard
                                             </button>
                                             <button
                                                 onClick={handleExport}
-                                                className="flex-1 py-4 border border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400 uppercase text-[10px] tracking-[0.2em] transition-all"
+                                                className="flex-1 py-4 border border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400 uppercase text-[10px] tracking-[0.2em] transition-all rounded-lg"
                                             >
                                                 Export JSON
                                             </button>
                                         </div>
                                         <button
                                             onClick={handleSave}
-                                            className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white uppercase text-xs tracking-[0.3em] font-bold shadow-[0_0_30px_rgba(8,145,178,0.4)] hover:shadow-[0_0_50px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02]"
+                                            className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white uppercase text-xs tracking-[0.3em] font-bold shadow-[0_0_30px_rgba(8,145,178,0.4)] hover:shadow-[0_0_50px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] rounded-lg"
                                         >
                                             Deploy Identity
                                         </button>

@@ -1,38 +1,27 @@
 import React from 'react';
 
-export function AudiobookShelf({ onPlay, currentAudio }) {
-    const books = [
-        {
-            id: 'genghis',
-            title: 'Genghis Khan',
-            author: 'History',
-            voice: 'Formal Male',
-            image: 'https://upload.wikimedia.org/wikipedia/commons/3/35/YuanEmperorAlbumGenghisPortrait.jpg',
-            file: '/audiobooks/genghis_khan_sample.wav',
-            color: 'from-amber-700 to-orange-900',
-            duration: '5 min'
-        },
-        {
-            id: 'anime',
-            title: 'Anime History',
-            author: 'Culture',
-            voice: 'Asian Female',
-            image: 'https://upload.wikimedia.org/wikipedia/commons/c/c6/Anime_Girl_reading.png', // Placeholder or generic
-            file: '/audiobooks/anime_sample.wav',
-            color: 'from-pink-500 to-rose-900',
-            duration: '4 min'
-        },
-        {
-            id: 'russia',
-            title: 'Russia',
-            author: 'Geography',
-            voice: 'Russian High Class',
-            image: 'https://upload.wikimedia.org/wikipedia/commons/f/f3/Moscow_Saint_Basil_Cathedral.jpg',
-            file: '/audiobooks/russia_sample.wav',
-            color: 'from-blue-600 to-slate-900',
-            duration: '6 min'
-        }
-    ];
+export function AudiobookShelf({ onPlay, currentAudio, books }) {
+    const defaultBooks = [];
+
+    const displayBooks = books || defaultBooks;
+
+    if (displayBooks.length === 0) {
+        return (
+            <div className="w-full glass-card p-8 rounded-3xl border border-white/10 mb-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 text-center">
+                <div className="inline-block p-4 rounded-full bg-white/5 mb-4">
+                    <span className="text-4xl">📚</span>
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-2">Audiobook Shelf</h2>
+                <p className="text-white/60 mb-6 max-w-md mx-auto">
+                    Our premium AI-narrated audiobooks are currently being curated. Check back soon for immersive listening experiences.
+                </p>
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 text-sm text-white/80 border border-white/5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    Coming Soon
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="w-full glass-card p-6 rounded-3xl border border-white/10 mb-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
@@ -47,7 +36,7 @@ export function AudiobookShelf({ onPlay, currentAudio }) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {books.map((book) => {
+                {displayBooks.map((book) => {
                     const isPlaying = currentAudio === book.file;
 
                     return (
@@ -81,8 +70,8 @@ export function AudiobookShelf({ onPlay, currentAudio }) {
 
                                 {/* Play Button */}
                                 <div className={`w-full py-3 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all duration-300 ${isPlaying
-                                        ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.4)]'
-                                        : 'bg-white/10 text-white hover:bg-white hover:text-black backdrop-blur-md'
+                                    ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.4)]'
+                                    : 'bg-white/10 text-white hover:bg-white hover:text-black backdrop-blur-md'
                                     }`}>
                                     <span>{isPlaying ? 'Playing...' : 'Listen Now'}</span>
                                     {!isPlaying && <span>▶</span>}

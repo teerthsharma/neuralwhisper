@@ -7,8 +7,15 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:80"
-    restart: unless-stopped
+    restart: always # Improved restart policy
     container_name: asmr-reader
+
+    # Resource constraints for optimization
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
 
     # Health check
     healthcheck:

@@ -16,28 +16,29 @@ We believe in transparency. Here is how our neural core translates pixels into p
 
 ```mermaid
 graph TD
-    User[User] -->|Uploads PDF/Text| UI[React Frontend (App.jsx)]
+    User[User] -->|Uploads PDF/Text| UI[React Frontend]
     User -->|Enters Wiki URL| UI
     
-    subgraph Frontend Logic
-        UI -->|Parses PDF| DP[Document Processor (Neural)]
+    subgraph Frontend_Logic [Frontend Logic]
+        UI -->|Parses PDF| DP[Document Processor]
         UI -->|Scrapes Article| Wiki[Wikipedia Scraper]
         UI -->|Requests Audio| TTS[TTS GPU Engine]
     end
 
-    subgraph Neural Core
-        TTS -->|Loads Model| Kokoro[Kokoro-82M (ONNX/WebGPU)]
+    subgraph Neural_Core [Neural Core]
+        TTS -->|Loads Model| Kokoro[Kokoro-82M ONNX/WebGPU]
         TTS -->|Generates PCM| AudioBuffer[Float32 PCM Buffer]
     end
 
-    subgraph Audio Processing
-        AudioBuffer -->|Raw Audio| Effects[AudioEffects Chain]
+    subgraph Audio_Processing [Audio Processing]
+        AudioBuffer -->|Raw Audio| Effects[Audio Effects Chain]
         Effects -->|EQ/Compressor| Output[Audio Output]
         Effects -->|Visualizes| Canvas[Liquid Waveform]
     end
 
     DP -->|Clean Text| TTS
     Wiki -->|Clean Text| TTS
+
 ```
 
 ---

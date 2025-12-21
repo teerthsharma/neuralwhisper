@@ -32,6 +32,9 @@ def get_wikipedia_summary(title, sentences=15):
     print(f"📖 Fetching Wikipedia: {title}...")
     try:
         url = "https://en.wikipedia.org/w/api.php"
+        headers = {
+            "User-Agent": "ASMR-Reader/1.0 (teert@example.com)" # Required by Wikimedia policy
+        }
         params = {
             "action": "query",
             "format": "json",
@@ -40,8 +43,16 @@ def get_wikipedia_summary(title, sentences=15):
             "exintro": True,
             "explaintext": True,
         }
-        r = requests.get(url, params=params).json()
-        page = next(iter(r["query"]["pages"].values()))
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        r = response.json()
+        
+        pages = r["query"]["pages"]
+        if "-1" in pages:
+             print(f"❌ Wikipedia page not found: {title}")
+             return None
+
+        page = next(iter(pages.values()))
         text = page["extract"]
         
         # Clean text
@@ -53,6 +64,8 @@ def get_wikipedia_summary(title, sentences=15):
         return text
     except Exception as e:
         print(f"❌ Failed to fetch {title}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def main():

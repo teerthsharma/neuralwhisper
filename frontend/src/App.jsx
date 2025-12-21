@@ -12,6 +12,9 @@ import { WelcomeHero } from './components/welcome-hero'
 import { AudiobookShelf } from './components/audiobook-shelf'
 import { UrlInput } from './components/url-input'
 import { LiquidSlider } from './components/liquid-slider'
+import { LiquidSlider } from './components/liquid-slider'
+import { VoiceLabPage } from './components/voice-lab-page'
+import { brain } from './lib/asmr-brain'
 
 // Sample text for voice preview
 const PREVIEW_TEXT = "Welcome to ASMR Reader. Experience premium AI-powered whisper synthesis."
@@ -95,6 +98,11 @@ export default function App() {
     const [wikipediaUrl, setWikipediaUrl] = useState('')
     const [isFetchingWikipedia, setIsFetchingWikipedia] = useState(false)
     const [wikipediaError, setWikipediaError] = useState('')
+
+    // Brain State
+    const [brainMode, setBrainMode] = useState(false)
+    const [brainConfidence, setBrainConfidence] = useState(0)
+    const [lastBrainContext, setLastBrainContext] = useState(null)
 
     // Producer controls state
     const [eqSettings, setEqSettings] = useState({
@@ -351,9 +359,45 @@ export default function App() {
         setIsGenerating(true)
         setGenerateProgress(0)
 
+        // Brain Mode Logic
+        let targetVoice = selectedVoice
+        let targetPitch = pitch
+        let targetSpeed = speed
+
+        if (brainMode) {
+            try {
+                const recommendation = await brain.recommend()
+                console.log('🧠 Brain Recommendation:', recommendation)
+
+                // Find voice object
+                const voiceObj = VOICE_LIST.find(v => v.id === recommendation.voiceId) ||
+                    customVoices.find(v => v.id === recommendation.voiceId) ||
+                    VOICE_LIST[0]
+
+                targetVoice = voiceObj
+                targetPitch = recommendation.pitch
+                targetSpeed = recommendation.speed
+
+                // Update UI to reflect brain's choice
+                setSelectedVoice(targetVoice)
+                setPitch(targetPitch)
+                setSpeed(targetSpeed)
+                setBrainConfidence(recommendation.confidence)
+
+                // Store context for learning later
+                setLastBrainContext({
+                    voiceId: targetVoice.id,
+                    speed: targetSpeed,
+                    pitch: targetPitch
+                })
+            } catch (e) {
+                console.warn('Brain inference failed, using manual settings', e)
+            }
+        }
+
         try {
             // Check cache first
-            const cacheKey = { voiceId: selectedVoice.id, pitch, speed }
+            const cacheKey = { voiceId: targetVoice.id, pitch: targetPitch, speed: targetSpeed }
             const cached = await previewCache.get(pdfText, cacheKey)
 
             if (cached) {
@@ -370,9 +414,9 @@ export default function App() {
             }
 
             const result = await ttsEngineRef.current.synthesize(pdfText, {
-                voiceId: selectedVoice.id,
-                pitch,
-                speed,
+                voiceId: targetVoice.id,
+                pitch: targetPitch,
+                speed: targetSpeed,
                 onChunkProgress: (p) => setGenerateProgress(p * 100)
             })
 
@@ -394,7 +438,16 @@ export default function App() {
         } finally {
             setIsGenerating(false)
         }
-    }, [pdfText, selectedVoice, pitch, speed, modelStatus])
+    }, [pdfText, selectedVoice, pitch, speed, modelStatus, brainMode, customVoices])
+
+    // Brain Feedback
+    const handleBrainFeedback = useCallback(async (liked) => {
+        if (lastBrainContext) {
+            await brain.learn(lastBrainContext, liked ? 1.0 : 0.0)
+            alert(liked ? "Brain trained: It liked this! 🧠" : "Brain trained: It will try something else next time.")
+            setLastBrainContext(null) // Clear so we don't train twice on same gen
+        }
+    }, [lastBrainContext])
 
     // Audio playback
     const togglePlayback = useCallback(() => {
@@ -730,8 +783,28 @@ export default function App() {
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [sleepMode])
 
+    // Page Routing State
+    const [currentPage, setCurrentPage] = useState('home') // 'home', 'voice-lab'
+
+    // Handle voice creation from lab
+    const handleVoiceCreated = (newVoice) => {
+        setCustomVoices(prev => [...prev, newVoice])
+        // Also update the loaded profile list
+        setSelectedVoice(newVoice)
+    }
+
+    if (currentPage === 'voice-lab') {
+        return (
+            <VoiceLabPage
+                onBack={() => setCurrentPage('home')}
+                onVoiceCreated={handleVoiceCreated}
+            />
+        )
+    }
+
     return (
         <div className="app">
+
             <VideoBackground />
 
             {/* Header */}
@@ -741,6 +814,13 @@ export default function App() {
                     <span className="logo-text">ASMR Reader</span>
                 </div>
                 <div className="header-status">
+                    <button
+                        onClick={() => setCurrentPage('voice-lab')}
+                        className="liquid-glass-btn flex items-center gap-2 px-4 py-1 text-xs uppercase tracking-widest hover:scale-105 transition-transform"
+                        style={{ padding: '0.5rem 1.2rem', fontSize: '0.75rem' }}
+                    >
+                        <span>🧬</span> Voice Lab
+                    </button>
                     {gpuBackend && (
                         <div className="gpu-badge">
                             <span className="gpu-icon">⚡</span>
@@ -879,6 +959,17 @@ export default function App() {
                                     <button className="download-btn" onClick={handleDownload} title="Download">
                                         ⬇️
                                     </button>
+                                    { /* Brain Feedback Button */}
+                                    {lastBrainContext && (
+                                        <button
+                                            className="like-btn"
+                                            onClick={() => handleBrainFeedback(true)}
+                                            title="I like this! (Train Brain)"
+                                            style={{ marginLeft: '10px', fontSize: '1.2rem', background: 'none', border: 'none', cursor: 'pointer' }}
+                                        >
+                                            ❤️
+                                        </button>
+                                    )}
                                 </div>
                                 <audio
                                     ref={audioRef}
@@ -1261,6 +1352,34 @@ export default function App() {
                             </div>
                         )
                     }
+
+                    {/* Brain Mode Toggle */}
+                    <div className="brain-mode-container" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
+                        <div className="squishy-toggle">
+                            <input
+                                type="checkbox"
+                                id="brain-mode-toggle"
+                                checked={brainMode}
+                                onChange={(e) => setBrainMode(e.target.checked)}
+                            />
+                            <label htmlFor="brain-mode-toggle" className="squishy-button">
+                                <span className="squishy-label">{brainMode ? '🧠' : '👤'}</span>
+                            </label>
+                        </div>
+                        <div className="brain-info">
+                            <span style={{ fontWeight: 'bold', color: brainMode ? '#a855f7' : '#94a3b8' }}>
+                                {brainMode ? 'Smart Brain Mode' : 'Standard Mode'}
+                            </span>
+                            <span style={{ display: 'block', fontSize: '0.75em', opacity: 0.7 }}>
+                                {brainMode ? 'AI optimizes settings for you' : 'Manual control'}
+                            </span>
+                        </div>
+                        {brainMode && brainConfidence > 0 && (
+                            <div className="brain-confidence" style={{ marginLeft: 'auto', fontSize: '0.8em', color: '#a855f7' }}>
+                                {Math.round(brainConfidence * 100)}% Match
+                            </div>
+                        )}
+                    </div>
 
                     {/* Generate Button */}
                     <button

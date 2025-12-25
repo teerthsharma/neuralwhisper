@@ -104,6 +104,9 @@ export default function App() {
     const [brainConfidence, setBrainConfidence] = useState(0)
     const [lastBrainContext, setLastBrainContext] = useState(null)
 
+    // First generation tracking - brain takes over after first generation
+    const [isFirstGeneration, setIsFirstGeneration] = useState(true)
+
     // Producer controls state
     const [eqSettings, setEqSettings] = useState({
         sub: 0, bass: 0, lowMid: 0, mid: 0, highMid: 0, presence: 0, brilliance: 0
@@ -449,13 +452,28 @@ export default function App() {
             }
 
             setAudioReady(true)
+
+            // After first generation, enable brain mode for future generations
+            if (isFirstGeneration) {
+                // Teach brain about user's initial preference
+                await brain.learn({
+                    voiceId: targetVoice.id,
+                    speed: targetSpeed,
+                    pitch: targetPitch
+                }, 1.0) // High satisfaction for user's initial choice
+
+                // Enable brain mode for all subsequent generations
+                setIsFirstGeneration(false)
+                setBrainMode(true)
+                console.log('🧠 Brain Mode activated! AI will now suggest voices based on your preferences.')
+            }
         } catch (error) {
             console.error('TTS generation failed:', error)
             alert('Audio generation failed: ' + error.message)
         } finally {
             setIsGenerating(false)
         }
-    }, [pdfText, selectedVoice, pitch, speed, modelStatus, brainMode, customVoices])
+    }, [pdfText, selectedVoice, pitch, speed, modelStatus, brainMode, customVoices, isFirstGeneration])
 
     // Brain Feedback
     const handleBrainFeedback = useCallback(async (liked) => {
@@ -579,6 +597,13 @@ export default function App() {
     }
 
     const handleEnded = () => {
+        // In sleep mode, loop the audio
+        if (sleepMode && audioRef.current) {
+            audioRef.current.currentTime = 0
+            audioRef.current.play().catch(e => console.warn('Loop play failed:', e))
+            return
+        }
+        // Normal behavior when not in sleep mode
         setIsPlaying(false)
         setProgress(0)
         if (animationRef.current) cancelAnimationFrame(animationRef.current)

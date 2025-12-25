@@ -1,13 +1,34 @@
 import * as tf from '@tensorflow/tfjs';
 
+/**
+ * ASMR BRAIN - THE CONDUCTOR (Living Sanctuary)
+ * ================================================
+ * Client-side deep learning model that learns user preferences for ASMR.
+ * 
+ * Features:
+ * - Temporal Awareness: Night Mode auto-activation after 11 PM
+ * - Exploration Bandit: Epsilon-greedy algorithm for new voice/setting suggestions
+ * - Biometric-Ready: Spectral centroid and HNR extraction for feedback loops
+ * - Personalized Recommendations: Voice, speed, pitch based on context
+ */
+
 // Define available voices mapping for one-hot encoding/decoding
-// This should match the keys in your voice manifest or be passed in
 const VOICE_IDS = [
-    'american_casual_female',
+    'american_casual',
     'asian_female',
-    'formal_english_male',
-    'russian_high_class_girl'
+    'russian_highclass',
+    'male_deep',
+    'asmr_soft',
+    'af_bella',
+    'af_sarah',
+    'af_nicole',
+    'am_adam',
+    'am_michael'
 ];
+
+// Exploration bandit settings
+const EPSILON = 0.15;  // 15% chance to explore new combinations
+const EXPLORATION_DECAY = 0.995;  // Decay exploration over time
 
 export class ASMRBrain {
     constructor() {
@@ -15,14 +36,18 @@ export class ASMRBrain {
         this.isTraining = false;
         this.trainingData = [];
         this.modelPath = 'indexeddb://asmr-brain-model';
+        this.explorationHistory = [];
+        this.currentEpsilon = EPSILON;
+        this.lastRecommendation = null;
+        this.sessionStartTime = Date.now();
         this.readyPromise = this.init();
     }
 
     async init() {
         try {
-            // Try to load existing model
             this.model = await tf.loadLayersModel(this.modelPath);
             console.log('🧠 ASMR Brain: Model loaded from storage.');
+            this._loadExplorationHistory();
         } catch (e) {
             console.log('🧠 ASMR Brain: No existing model found, creating new one.');
             this.model = this.createModel();
@@ -32,47 +57,114 @@ export class ASMRBrain {
     createModel() {
         const model = tf.sequential();
 
-        // Input: [sin_time, cos_time, day_norm, session_duration_norm, last_speed, last_pitch]
-        // Size: 6
-
-        // Hidden Layer 1
+        // Input: [sin_time, cos_time, day_norm, session_duration_norm, last_speed, last_pitch, is_night, exploration_score]
         model.add(tf.layers.dense({
-            inputShape: [6],
-            units: 16,
+            inputShape: [8],
+            units: 32,
             activation: 'relu',
             kernelInitializer: 'heNormal'
         }));
 
-        // Hidden Layer 2
+        model.add(tf.layers.dropout({ rate: 0.2 }));
+
         model.add(tf.layers.dense({
-            units: 16,
+            units: 24,
             activation: 'relu'
         }));
 
-        // We need multi-output... but tf.sequential is single pipe.
-        // For simplicity in this v1, we will have one large output vector and slice it manually
-        // or use distinct models. 
-        // Let's use a single output layer of size:
-        // [Voice_Prob_1, ..., Voice_Prob_4, Speed, Pitch]
-        // Size: 4 (Voices) + 1 (Speed) + 1 (Pitch) = 6 units
-
+        // Output: Voice probabilities + Speed + Pitch + Breathiness
         model.add(tf.layers.dense({
-            units: VOICE_IDS.length + 2,
-            activation: 'sigmoid' // simple bounding for normalized outputs
+            units: VOICE_IDS.length + 3,
+            activation: 'sigmoid'
         }));
 
         model.compile({
-            optimizer: tf.train.adam(0.01),
-            loss: 'meanSquaredError' // Simplified loss for mixed output vectors
+            optimizer: tf.train.adam(0.005),
+            loss: 'meanSquaredError'
         });
 
         return model;
     }
 
-    /**
-     * Get recommendation based on current context
-     */
-    async recommend() {
+    // ===============================================================
+    // TEMPORAL AWARENESS (Night Mode)
+    // ===============================================================
+
+    isNightTime() {
+        const hour = new Date().getHours();
+        return hour >= 23 || hour < 6;
+    }
+
+    getNightModeSettings() {
+        return {
+            eqPreset: 'warm',
+            speedMod: 0.9,
+            pitchMod: 0.98,
+            breathiness: 1.2,
+            reverb: 0.15,
+            warmth: 3,
+            brilliance: -3
+        };
+    }
+
+    // ===============================================================
+    // EXPLORATION BANDIT (Prevent Sensory Adaptation)
+    // ===============================================================
+
+    async maybeExplore(baseRecommendation) {
+        if (Math.random() < this.currentEpsilon) {
+            console.log('🎲 ASMR Brain: Exploring new combination!');
+
+            const recentVoices = this.explorationHistory.slice(-10).map(e => e.voiceId);
+            const unexploredVoices = VOICE_IDS.filter(v => !recentVoices.includes(v));
+
+            const explorationVoice = unexploredVoices.length > 0
+                ? unexploredVoices[Math.floor(Math.random() * unexploredVoices.length)]
+                : VOICE_IDS[Math.floor(Math.random() * VOICE_IDS.length)];
+
+            const exploration = {
+                voiceId: explorationVoice,
+                speed: Math.max(0.6, Math.min(1.4, baseRecommendation.speed + (Math.random() * 0.2 - 0.1))),
+                pitch: Math.max(0.85, Math.min(1.2, baseRecommendation.pitch + (Math.random() * 0.1 - 0.05))),
+                breathiness: Math.random() * 0.4 + 0.3,
+                isExploration: true,
+                confidence: 0.5
+            };
+
+            this.explorationHistory.push({
+                voiceId: exploration.voiceId,
+                timestamp: Date.now(),
+                wasAccepted: null
+            });
+
+            this.currentEpsilon *= EXPLORATION_DECAY;
+            this._saveExplorationHistory();
+
+            return exploration;
+        }
+
+        return { ...baseRecommendation, isExploration: false };
+    }
+
+    recordExplorationFeedback(wasPositive) {
+        if (this.explorationHistory.length > 0) {
+            const lastExploration = this.explorationHistory[this.explorationHistory.length - 1];
+            if (lastExploration.wasAccepted === null) {
+                lastExploration.wasAccepted = wasPositive;
+                if (wasPositive) {
+                    this.currentEpsilon = Math.min(EPSILON, this.currentEpsilon * 1.1);
+                }
+                this._saveExplorationHistory();
+                console.log(`🎲 ASMR Brain: Exploration feedback: ${wasPositive ? '👍' : '👎'}`);
+            }
+        }
+    }
+
+    // ===============================================================
+    // RECOMMENDATION ENGINE
+    // ===============================================================
+
+    async recommend(includeExploration = true) {
         await this.readyPromise;
 
         const context = this.getCurrentContext();
@@ -84,57 +176,60 @@ export class ASMRBrain {
         inputTensor.dispose();
         prediction.dispose();
 
-        // Decode Result
-        // First N outputs are Voice Probabilities
         const voiceProbs = result.slice(0, VOICE_IDS.length);
         const maxProbIndex = voiceProbs.indexOf(Math.max(...voiceProbs));
         const recommendedVoice = VOICE_IDS[maxProbIndex];
 
-        // Next is Speed (map 0-1 back to 0.5-2.0)
-        let speed = result[VOICE_IDS.length];
-        speed = 0.5 + (speed * 1.5);
+        let speed = 0.5 + (result[VOICE_IDS.length] * 1.5);
+        let pitch = 0.8 + (result[VOICE_IDS.length + 1] * 0.7);
+        let breathiness = result[VOICE_IDS.length + 2] * 0.8;
 
-        // Next is Pitch (map 0-1 back to 0.8-1.5)
-        let pitch = result[VOICE_IDS.length + 1];
-        pitch = 0.8 + (pitch * 0.7);
-
-        return {
+        let baseRecommendation = {
             voiceId: recommendedVoice,
             speed: parseFloat(speed.toFixed(2)),
             pitch: parseFloat(pitch.toFixed(2)),
-            confidence: Math.max(...voiceProbs) // Simplistic confidence
+            breathiness: parseFloat(breathiness.toFixed(2)),
+            confidence: Math.max(...voiceProbs)
         };
+
+        // Apply Night Mode
+        if (this.isNightTime()) {
+            const nightSettings = this.getNightModeSettings();
+            baseRecommendation.speed *= nightSettings.speedMod;
+            baseRecommendation.pitch *= nightSettings.pitchMod;
+            baseRecommendation.breathiness = Math.max(baseRecommendation.breathiness, 0.4);
+            baseRecommendation.nightMode = true;
+            console.log('🌙 ASMR Brain: Night Mode applied');
+        }
+
+        if (includeExploration) {
+            return this.maybeExplore(baseRecommendation);
+        }
+
+        this.lastRecommendation = baseRecommendation;
+        return baseRecommendation;
     }
 
-    /**
-     * Learn from a user interaction
-     * @param {Object} actualSettings - { voiceId, speed, pitch }
-     * @param {number} satisfaction - 0.0 to 1.0 (1.0 for "Like", 0.5 for "Listen")
-     */
+    // ===============================================================
+    // LEARNING
+    // ===============================================================
+
     async learn(actualSettings, satisfaction = 1.0) {
         if (!actualSettings) return;
 
-        // Create Training Target Vector
-        // 1. One-hot voice
         const voiceVector = new Array(VOICE_IDS.length).fill(0);
         const voiceIdx = VOICE_IDS.indexOf(actualSettings.voiceId);
         if (voiceIdx !== -1) voiceVector[voiceIdx] = 1;
 
-        // 2. Normalize Speed (0.5 - 2.0 -> 0 - 1)
         const normSpeed = (actualSettings.speed - 0.5) / 1.5;
-
-        // 3. Normalize Pitch (0.8 - 1.5 -> 0 - 1)
         const normPitch = (actualSettings.pitch - 0.8) / 0.7;
+        const normBreathiness = (actualSettings.breathiness || 0) / 0.8;
 
-        const targetv = [...voiceVector, normSpeed, normPitch];
-
-        // Get Input Context
+        const targetv = [...voiceVector, normSpeed, normPitch, normBreathiness].map(v => v * satisfaction);
         const context = this.getCurrentContext();
 
-        // Store
         this.trainingData.push({ x: context, y: targetv });
 
-        // Auto-train if we have enough new data
         if (this.trainingData.length >= 5) {
             await this.train();
         }
@@ -143,50 +238,128 @@ export class ASMRBrain {
     async train() {
         if (this.isTraining || this.trainingData.length === 0) return;
         this.isTraining = true;
-        console.log('🧠 ASMR Brain: Training started...');
+        console.log('🧠 ASMR Brain: Training...');
 
         const xs = tf.tensor2d(this.trainingData.map(d => d.x));
         const ys = tf.tensor2d(this.trainingData.map(d => d.y));
 
-        await this.model.fit(xs, ys, {
-            epochs: 5,
-            shuffle: true
-        });
+        await this.model.fit(xs, ys, { epochs: 10, shuffle: true, validationSplit: 0.1 });
 
-        console.log('🧠 ASMR Brain: Training complete.');
-
-        // Save
         await this.model.save(this.modelPath);
-
-        // Clear buffer
         this.trainingData = [];
         this.isTraining = false;
 
         xs.dispose();
         ys.dispose();
+        console.log('🧠 ASMR Brain: Training complete.');
     }
 
-    /**
-     * Helpers
-     */
+    // ===============================================================
+    // BIOMETRIC-READY: Audio Feature Extraction
+    // ===============================================================
+
+    getSpectralCentroid(fftData, sampleRate = 48000) {
+        let numerator = 0, denominator = 0;
+        const binWidth = sampleRate / (fftData.length * 2);
+
+        for (let i = 0; i < fftData.length; i++) {
+            const magnitude = Math.pow(10, fftData[i] / 20);
+            numerator += i * binWidth * magnitude;
+            denominator += magnitude;
+        }
+
+        return denominator > 0 ? numerator / denominator : 0;
+    }
+
+    getHNR(audioBuffer) {
+        if (!audioBuffer || audioBuffer.length < 512) return 0;
+
+        const frameSize = 512;
+        const frame = audioBuffer.slice(0, frameSize);
+        let energy = 0, maxCorrelation = 0;
+
+        for (let i = 0; i < frameSize; i++) {
+            energy += frame[i] * frame[i];
+        }
+
+        for (let lag = 30; lag < frameSize / 2; lag++) {
+            let correlation = 0;
+            for (let i = 0; i < frameSize - lag; i++) {
+                correlation += frame[i] * frame[i + lag];
+            }
+            if (correlation > maxCorrelation) maxCorrelation = correlation;
+        }
+
+        if (energy === 0 || maxCorrelation <= 0) return 0;
+        const noiseEnergy = energy - maxCorrelation;
+        return noiseEnergy <= 0 ? 20 : 10 * Math.log10(maxCorrelation / noiseEnergy);
+    }
+
+    getRMSEnergy(audioBuffer) {
+        if (!audioBuffer || audioBuffer.length === 0) return 0;
+        let sum = 0;
+        for (let i = 0; i < audioBuffer.length; i++) {
+            sum += audioBuffer[i] * audioBuffer[i];
+        }
+        return Math.sqrt(sum / audioBuffer.length);
+    }
+
+    // ===============================================================
+    // CONTEXT & HELPERS
+    // ===============================================================
+
     getCurrentContext() {
         const now = new Date();
-
-        // 1. Cyclic Time
         const minutes = now.getHours() * 60 + now.getMinutes();
-        const totalMinutes = 24 * 60;
-        const t = minutes / totalMinutes;
-        const sinTime = Math.sin(2 * Math.PI * t);
-        const cosTime = Math.cos(2 * Math.PI * t);
+        const t = minutes / (24 * 60);
 
-        // 2. Day of Week (Normalized)
-        const day = now.getDay() / 6;
+        const sessionDuration = Math.min(1, (Date.now() - this.sessionStartTime) / (2 * 60 * 60 * 1000));
+        const lastSpeed = this.lastRecommendation?.speed || 0.85;
+        const lastPitch = this.lastRecommendation?.pitch || 1.0;
+        const explorationScore = Math.min(1, this.explorationHistory.length / 50);
 
-        // 3. Session Duration (not implemented fully, using random small noise for variation)
-        const sessionNoise = Math.random() * 0.1;
+        return [
+            Math.sin(2 * Math.PI * t),
+            Math.cos(2 * Math.PI * t),
+            now.getDay() / 6,
+            sessionDuration,
+            lastSpeed,
+            lastPitch,
+            this.isNightTime() ? 1 : 0,
+            explorationScore
+        ];
+    }
 
-        // 4. Placeholders for previous state (0 for now)
-        return [sinTime, cosTime, day, sessionNoise, 0, 0];
+    _loadExplorationHistory() {
+        try {
+            const saved = localStorage.getItem('asmr_brain_exploration');
+            if (saved) {
+                const data = JSON.parse(saved);
+                this.explorationHistory = data.history || [];
+                this.currentEpsilon = data.epsilon || EPSILON;
+            }
+        } catch (e) { }
+    }
+
+    _saveExplorationHistory() {
+        try {
+            localStorage.setItem('asmr_brain_exploration', JSON.stringify({
+                history: this.explorationHistory.slice(-100),
+                epsilon: this.currentEpsilon
+            }));
+        } catch (e) { }
+    }
+
+    async lobotomy() {
+        this.trainingData = [];
+        this.explorationHistory = [];
+        this.currentEpsilon = EPSILON;
+        this.lastRecommendation = null;
+        this.model = this.createModel();
+        localStorage.removeItem('asmr_brain_exploration');
+        try { await tf.io.removeModel(this.modelPath); } catch (e) { }
+        console.log('🧠 ASMR Brain: Complete reset.');
+        return true;
     }
 }
 

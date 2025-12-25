@@ -6,6 +6,7 @@
 
 import { getVoiceProfile } from './voice-profiles.js'
 import { hiveMind } from './hive-mind.js'
+import { neuralDirector, EMOTION_PRESETS } from './neural-director.js'
 
 // IndexedDB cache for generated audio
 const DB_NAME = 'tts-audio-cache'
@@ -279,7 +280,10 @@ export class TTSGPUEngine {
     }
 
     /**
-     * Synthesize with HIVE MIND INTELLIGENCE
+     * Synthesize with HIVE MIND INTELLIGENCE + NEURAL DIRECTOR
+     * @param {string} text - Text to synthesize
+     * @param {Object} options - Synthesis options
+     * @param {boolean} options.useDirector - Enable Neural Director semantic tagging (default: true)
      */
     async synthesize(text, options = {}) {
         if (!this.isReady) await this.initialize()
@@ -288,45 +292,63 @@ export class TTSGPUEngine {
             voiceId = 'american_casual',
             pitch = 1.0,
             speed = 0.85,
-            onChunkProgress = null
+            onChunkProgress = null,
+            useDirector = true  // NEW: Enable Neural Director by default
         } = options
 
         // 1. Get Base Profile
         const profile = getVoiceProfile(voiceId)
 
         // 2. Consult HIVE MIND for optimizations
-        // We merge the profile defaults with the user's manual settings, then apply hive bias
         const baseSettings = {
             pitch: pitch * profile.defaultPitch,
             speed: speed * profile.defaultSpeed
         }
-
         const optimized = hiveMind.getOptimizedSettings(baseSettings)
 
         // 3. Set DSP Mode if profile suggests it
         if (profile.mode) {
             this.setAudioMode(profile.mode)
         } else {
-            this.setAudioMode(this.audioMode) // Use current global mode
+            this.setAudioMode(this.audioMode)
         }
 
-        // PRE-PROCESS TEXT FOR PROSODY
-        const processedText = this._preprocessText(text, this.audioMode)
-
-        console.log(`[TTS] Synthesizing: "${processedText.slice(0, 20)}..."`, optimized)
-
-        // 4. Check Cache
-        const cacheKey = this._hashText(processedText, profile.kokoroVoice, optimized.speed, optimized.pitch)
+        // 4. Check Cache (use original text for cache key, not directed)
+        const cacheKey = this._hashText(text, profile.kokoroVoice, optimized.speed, optimized.pitch)
         const cached = await this._getCachedAudio(cacheKey)
         if (cached) return cached
 
-        // 5. Generate
+        // 5. NEW: Neural Director semantic analysis
+        if (useDirector && !this.useWebSpeechFallback && this.tts) {
+            try {
+                console.log('[TTS] 🎬 Engaging Neural Director...')
+                const instructions = await neuralDirector.analyze(text)
+
+                if (instructions.segments && instructions.segments.length > 0) {
+                    const result = await this._synthesizeDirected(instructions, {
+                        voiceId: profile.kokoroVoice,
+                        basePitch: optimized.pitch,
+                        baseSpeed: optimized.speed,
+                        onChunkProgress
+                    })
+                    await this._setCachedAudio(cacheKey, result)
+                    return result
+                }
+            } catch (err) {
+                console.warn('[TTS] Neural Director failed, falling back to standard synthesis:', err)
+            }
+        }
+
+        // 6. Standard synthesis path
+        const processedText = this._preprocessText(text, this.audioMode)
+        console.log(`[TTS] Synthesizing: "${processedText.slice(0, 20)}..."`, optimized)
+
         if (this.useWebSpeechFallback || !this.tts) {
             return this._synthesizeWebSpeech(processedText, { ...optimized, voiceId })
         }
 
         const result = await this._synthesizeKokoroOptimized(processedText, {
-            voiceId: profile.kokoroVoice, // Use the raw Kokoro ID here
+            voiceId: profile.kokoroVoice,
             pitch: optimized.pitch,
             speed: optimized.speed,
             onChunkProgress
@@ -334,6 +356,62 @@ export class TTSGPUEngine {
 
         await this._setCachedAudio(cacheKey, result)
         return result
+    }
+
+    /**
+     * NEW: Directed synthesis using Neural Director instructions
+     * Synthesizes each segment with emotion-specific parameters and injects triggers
+     */
+    async _synthesizeDirected(instructions, { voiceId, basePitch, baseSpeed, onChunkProgress }) {
+        const { segments } = instructions
+        const allAudioChunks = []
+        let processedSegments = 0
+
+        console.log(`[TTS] 🎬 Directed synthesis: ${segments.length} segments`)
+
+        for (const segment of segments) {
+            // 1. Inject trigger audio (breaths, pauses) BEFORE the segment
+            const triggers = neuralDirector.parseTriggers(segment)
+
+            for (let i = 0; i < triggers.breaths; i++) {
+                const breathAudio = neuralDirector.generateBreath(24000)
+                allAudioChunks.push({ audio: breathAudio, sampling_rate: 24000 })
+            }
+
+            for (const pauseDuration of triggers.pauses) {
+                const silenceAudio = neuralDirector.generateSilence(pauseDuration, 24000)
+                allAudioChunks.push({ audio: silenceAudio, sampling_rate: 24000 })
+            }
+
+            // 2. Synthesize the segment with emotion-modified parameters
+            const emotionSpeed = baseSpeed * (segment.speedMod || 1.0)
+            const emotionPitch = basePitch * (segment.pitchMod || 1.0)
+
+            try {
+                const audio = await this.tts.generate(segment.text, {
+                    voice: voiceId,
+                    speed: emotionSpeed
+                })
+
+                if (audio && audio.audio && audio.audio.length > 0) {
+                    // Apply pitch shift if needed
+                    if (Math.abs(emotionPitch - 1.0) > 0.05) {
+                        audio.audio = this._pitchShift(audio.audio, emotionPitch)
+                    }
+                    allAudioChunks.push(audio)
+                    console.log(`[TTS] 🎭 Segment [${segment.emotion}]: "${segment.text.slice(0, 25)}..." speed=${emotionSpeed.toFixed(2)} pitch=${emotionPitch.toFixed(2)}`)
+                }
+            } catch (err) {
+                console.warn(`[TTS] Segment synthesis failed:`, err)
+            }
+
+            processedSegments++
+            onChunkProgress?.(processedSegments / segments.length)
+        }
+
+        // Combine all audio chunks
+        const combined = this._combineAudioChunks(allAudioChunks)
+        return this._audioToBlob(combined)
     }
 
     /**

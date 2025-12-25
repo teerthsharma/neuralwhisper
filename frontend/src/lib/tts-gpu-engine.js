@@ -331,8 +331,14 @@ export class TTSGPUEngine {
                         baseSpeed: optimized.speed,
                         onChunkProgress
                     })
-                    await this._setCachedAudio(cacheKey, result)
-                    return result
+
+                    // Fallback if directed synthesis produced no valid audio
+                    if (result && result.blob && result.blob.size > 0 && result.duration > 0) {
+                        await this._setCachedAudio(cacheKey, result)
+                        return result
+                    } else {
+                        console.warn('[TTS] Neural Director produced empty audio, falling back to standard synthesis')
+                    }
                 }
             } catch (err) {
                 console.warn('[TTS] Neural Director failed, falling back to standard synthesis:', err)
@@ -411,6 +417,13 @@ export class TTSGPUEngine {
 
         // Combine all audio chunks
         const combined = this._combineAudioChunks(allAudioChunks)
+
+        // Check if we actually have audio data
+        if (!combined.audio || combined.audio.length === 0 || combined.isEmpty) {
+            console.warn('[TTS] Directed synthesis resulted in empty audio')
+            return { blob: new Blob([], { type: 'audio/wav' }), duration: 0 }
+        }
+
         return this._audioToBlob(combined)
     }
 

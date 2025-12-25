@@ -17,7 +17,7 @@ NeuralWhisper isn't just TTS—it's an **intelligent audio director** that *perf
 | **Voice Synthesis** | Kokoro-82M (WebGPU/FP32) | Real-time, 24kHz |
 | **Speaker Embedding** | WebGPU Mel-Spectrogram | 256-dim d-vectors |
 | **Psychoacoustics** | ISO 532-1 Loudness | Research-grade analysis |
-| **High-Perf DSP** | Rust/WASM (YIN, FFT) | 27x faster than JS |
+| **High-Perf DSP** | Rust/WASM (YIN, FFT) | 116x faster than JS |
 | **3D Audio** | HRTF Binaural Panner | 360° soundstage |
 
 ---
@@ -88,7 +88,7 @@ High-performance signal processing:
 - **YIN Pitch Detection** (de Cheveigné & Kawahara, 2002)
 - **Formant Analysis** via LPC
 - **Sinc Resampling** (Lanczos window)
-- **27x speedup** over JavaScript
+- **116x speedup** over JavaScript (FFT-accelerated YIN)
 
 ### Spectral Statistics (`spectral-statistics.js`)
 R-inspired statistical analysis:

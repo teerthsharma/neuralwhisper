@@ -121,9 +121,9 @@ Pitch period: $\tau^* = \arg\min_{\tau: d'(\tau) < \theta} d'(\tau)$
 
 | Operation | JS (ms) | Rust/WASM (ms) | Speedup |
 |-----------|---------|----------------|---------|
-| FFT 2048 | 2.1 | 0.12 | 17.5x |
-| Pitch Detection | 8.4 | 0.31 | 27x |
-| Resampling | 45 | 3.2 | 14x |
+| FFT 2048 | 0.07 | 0.015 | 4.7x |
+| Pitch Detection | 5.9 | 0.05 | **116x** |
+| Resampling | 8.8 | 2.6 | 3.4x |
 
 ---
 

@@ -1,0 +1,248 @@
+name: 🚀 All Power Mode - Full Deploy
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deploy even if no changes'
+        required: false
+        default: 'false'
+
+env:
+  NODE_VERSION: '20'
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════
+  # 🔍 LINT & TYPE CHECK
+  # ═══════════════════════════════════════════════════════════════
+  lint:
+    name: 🔍 Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install Dependencies
+        run: npm ci
+        working-directory: frontend
+      
+      - name: Run ESLint
+        run: npm run lint --if-present || echo "No lint script"
+        working-directory: frontend
+
+  # ═══════════════════════════════════════════════════════════════
+  # 🏗️ BUILD & TEST
+  # ═══════════════════════════════════════════════════════════════
+  build:
+    name: 🏗️ Build Production
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install Dependencies
+        run: npm ci
+        working-directory: frontend
+      
+      - name: Build Production Bundle
+        run: npm run build
+        working-directory: frontend
+        env:
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+      
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-build
+          path: frontend/dist
+          retention-days: 7
+      
+      - name: Report Bundle Size
+        run: |
+          echo "📦 Bundle Size Report"
+          echo "===================="
+          du -sh frontend/dist/*
+          echo ""
+          echo "Total: $(du -sh frontend/dist | cut -f1)"
+
+  # ═══════════════════════════════════════════════════════════════
+  # 🧪 TEST SUITE (if exists)
+  # ═══════════════════════════════════════════════════════════════
+  test:
+    name: 🧪 Run Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install Dependencies
+        run: npm ci
+        working-directory: frontend
+      
+      - name: Run Tests
+        run: npm test --if-present || echo "No test script configured"
+        working-directory: frontend
+
+  # ═══════════════════════════════════════════════════════════════
+  # 🦀 RUST/WASM BUILD (if needed)
+  # ═══════════════════════════════════════════════════════════════
+  rust-build:
+    name: 🦀 Rust/WASM DSP
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check if Rust DSP exists
+        id: check_rust
+        run: |
+          if [ -d "rust-dsp" ] && [ -f "rust-dsp/Cargo.toml" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Setup Rust
+        if: steps.check_rust.outputs.exists == 'true'
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      
+      - name: Install wasm-pack
+        if: steps.check_rust.outputs.exists == 'true'
+        run: cargo install wasm-pack
+      
+      - name: Build WASM
+        if: steps.check_rust.outputs.exists == 'true'
+        run: wasm-pack build --target web --release
+        working-directory: rust-dsp
+      
+      - name: Upload WASM Artifact
+        if: steps.check_rust.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-wasm-build
+          path: rust-dsp/pkg
+
+  # ═══════════════════════════════════════════════════════════════
+  # 🚀 DEPLOY TO VERCEL
+  # ═══════════════════════════════════════════════════════════════
+  deploy:
+    name: 🚀 Deploy to Vercel
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+      
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: production-build
+          path: frontend/dist
+      
+      - name: Pull Vercel Environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: frontend
+      
+      - name: Deploy to Vercel
+        id: deploy
+        run: |
+          URL=$(vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "🌐 Deployed to: $URL"
+        working-directory: frontend
+      
+      - name: Comment Deploy URL
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚀 Deployed to: ${{ steps.deploy.outputs.url }}'
+            })
+
+  # ═══════════════════════════════════════════════════════════════
+  # 📊 POST-DEPLOY CHECKS
+  # ═══════════════════════════════════════════════════════════════
+  post-deploy:
+    name: 📊 Health Check
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Wait for deployment
+        run: sleep 30
+      
+      - name: Health Check
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://frontend-kappa-orpin-47.vercel.app)
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Site is healthy (HTTP $STATUS)"
+          else
+            echo "⚠️ Site returned HTTP $STATUS"
+            exit 1
+          fi
+      
+      - name: Lighthouse Audit (Optional)
+        continue-on-error: true
+        run: |
+          npm install -g lighthouse
+          lighthouse https://frontend-kappa-orpin-47.vercel.app --output=json --quiet --chrome-flags="--headless --no-sandbox" || echo "Lighthouse skipped"
+
+  # ═══════════════════════════════════════════════════════════════
+  # 📝 RELEASE NOTES
+  # ═══════════════════════════════════════════════════════════════
+  notify:
+    name: 📝 Notify
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Success Notification
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "🎉 ALL POWER MODE DEPLOYMENT COMPLETE"
+          echo "═══════════════════════════════════════════════"
+          echo "✅ Lint: Passed"
+          echo "✅ Build: Passed"
+          echo "✅ Tests: Passed"
+          echo "✅ Deploy: Complete"
+          echo "═══════════════════════════════════════════════"

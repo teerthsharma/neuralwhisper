@@ -1,0 +1,68 @@
+name: ⚡ Speed Mode - Fast Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_lint:
+        description: 'Skip linting'
+        required: false
+        default: 'true'
+      skip_tests:
+        description: 'Skip tests'
+        required: false
+        default: 'true'
+
+env:
+  NODE_VERSION: '20'
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════
+  # ⚡ SPEED BUILD - NO FRILLS, JUST SHIP
+  # ═══════════════════════════════════════════════════════════════
+  speed-deploy:
+    name: ⚡ Speed Deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install Dependencies
+        run: npm ci --prefer-offline
+        working-directory: frontend
+      
+      - name: Quick Build
+        run: npm run build
+        working-directory: frontend
+        env:
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+      
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+      
+      - name: Deploy NOW
+        id: deploy
+        run: |
+          URL=$(vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes)
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "⚡ Speed deployed to: $URL"
+        working-directory: frontend
+      
+      - name: Done
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "⚡ SPEED MODE COMPLETE"
+          echo "═══════════════════════════════════════════════"
+          echo "🚀 Deployed: ${{ steps.deploy.outputs.url }}"
+          echo "⏱️ Time: Fast as possible"
+          echo "═══════════════════════════════════════════════"

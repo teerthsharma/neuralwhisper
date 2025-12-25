@@ -90,6 +90,16 @@ High-performance signal processing:
 - **Sinc Resampling** (Lanczos window)
 - **116x speedup** over JavaScript (FFT-accelerated YIN)
 
+#### Verified Benchmarks
+
+| Operation | JS (ms) | WASM (ms) | Speedup |
+|-----------|---------|-----------|---------|
+| FFT 2048 | 0.07 | 0.015 | 4.7x |
+| **Pitch Detection** | 5.9 | 0.05 | **116x** |
+| Resampling (1s) | 8.8 | 2.6 | 3.4x |
+
+> Run `node scripts/benchmark-wasm.mjs` to reproduce.
+
 ### Spectral Statistics (`spectral-statistics.js`)
 R-inspired statistical analysis:
 - Spectral moments (centroid, spread, skewness, kurtosis)

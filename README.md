@@ -172,4 +172,4 @@ MIT License. Built with 🧠 for the ASMR research community.
 
 ---
 
-*"We don't just read text. We perform it."*
+*"Well Ai finally for asmr"*

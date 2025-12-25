@@ -3,5 +3,37 @@
     "buildCommand": "cd frontend && npm run build",
     "outputDirectory": "frontend/dist",
     "installCommand": "cd frontend && npm install",
-    "framework": "vite"
+    "framework": "vite",
+    "headers": [
+        {
+            "source": "/(.*)\\.wasm",
+            "headers": [
+                {
+                    "key": "Content-Type",
+                    "value": "application/wasm"
+                },
+                {
+                    "key": "Cross-Origin-Embedder-Policy",
+                    "value": "require-corp"
+                },
+                {
+                    "key": "Cross-Origin-Opener-Policy",
+                    "value": "same-origin"
+                }
+            ]
+        },
+        {
+            "source": "/(.*)",
+            "headers": [
+                {
+                    "key": "Cross-Origin-Embedder-Policy",
+                    "value": "credentialless"
+                },
+                {
+                    "key": "Cross-Origin-Opener-Policy",
+                    "value": "same-origin"
+                }
+            ]
+        }
+    ]
 }

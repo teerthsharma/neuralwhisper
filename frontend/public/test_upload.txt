@@ -1,3 +1,0 @@
-This is a test document to verify the text extraction and reading functionality of the ASMR Reader application.
-It contains simple text that should be easy to process.
-End of test.

@@ -40,3 +40,14 @@ samples/*.wav
 
 # Vercel
 .vercel/
+
+# Log files
+*.log
+deployment_log.txt
+generation_log.txt
+
+# Test output
+scripts/test_output/
+
+# Error samples
+error samples/

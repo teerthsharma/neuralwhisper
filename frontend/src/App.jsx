@@ -165,7 +165,10 @@ export default function App() {
 
         return () => {
             if (animationRef.current) cancelAnimationFrame(animationRef.current)
-            if (audioContextRef.current) audioContextRef.current.close()
+            if (sleepAnimationRef.current) cancelAnimationFrame(sleepAnimationRef.current)
+            if (audioContextRef.current) {
+                audioContextRef.current.close().catch(() => { }) // Graceful close
+            }
         }
     }, [])
 
@@ -342,15 +345,16 @@ export default function App() {
         handleFileUpload(e.dataTransfer.files[0])
     }
 
-    // Wikipedia fetch handler
-    const handleWikipediaFetch = useCallback(async () => {
-        if (!wikipediaUrl.trim()) return
+    // Wikipedia fetch handler - accepts URL parameter to avoid race condition
+    const handleWikipediaFetch = useCallback(async (urlParam) => {
+        const targetUrl = urlParam || wikipediaUrl
+        if (!targetUrl.trim()) return
 
         setIsFetchingWikipedia(true)
         setWikipediaError('')
 
         try {
-            const result = await fetchWikipediaArticle(wikipediaUrl)
+            const result = await fetchWikipediaArticle(targetUrl)
             setPdfText(`# ${result.title}\n\n${result.content}`)
             setAudioReady(false)
             setAudioUrl(null)
@@ -623,9 +627,7 @@ export default function App() {
         if (preset.settings.eq) {
             setEqSettings(prev => ({
                 ...prev,
-                ...Object.fromEntries(
-                    Object.entries(preset.settings.eq).map(([k, v]) => [k, v.gain])
-                )
+                ...preset.settings.eq // Fixed: EQ values are already numbers, not objects with .gain
             }))
         }
         if (preset.settings.reverb) {
@@ -897,7 +899,7 @@ export default function App() {
                             <WelcomeHero />
 
                             <UrlInput
-                                onFetch={(url) => { setWikipediaUrl(url); handleWikipediaFetch(); }}
+                                onFetch={(url) => handleWikipediaFetch(url)}
                                 isLoading={isFetchingWikipedia}
                             />
                             {wikipediaError && (

@@ -83,6 +83,7 @@ export function VoiceLabPage({ onBack, onVoiceCreated }) {
 
         } catch (e) {
             console.error(e)
+            alert('Failed to analyze audio. Please try a different file.')
             setStep('upload')
         }
     }
@@ -134,7 +135,11 @@ export function VoiceLabPage({ onBack, onVoiceCreated }) {
                 breathiness: analysis.breathiness,
                 clarity: analysis.clarity
             },
-            referenceClip: file && file.type ? URL.createObjectURL(file) : null
+            // Create Object URL only if we have a valid file with a type
+            // Note: Object URLs should be revoked when no longer needed to prevent memory leaks
+            referenceClip: file && file.type ? URL.createObjectURL(file) : null,
+            // We'll need to revoke this URL when the voice is removed from the list
+            _revokeClip: function () { if (this.referenceClip) URL.revokeObjectURL(this.referenceClip) }
         }
 
         onVoiceCreated(newVoice)

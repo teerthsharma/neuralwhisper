@@ -10,7 +10,7 @@
  */
 
 import { AudioProcessor } from './webgpu-audio-processor.js';
-import { initDSP, isDSPAvailable, createPitchDetector, createFormantAnalyzer } from './dsp-wasm-loader.js';
+import { initDSP, isDSPAvailable, createPitchDetector, createFormantAnalyzer } from './sanctuary-dsp.js';
 
 // Kokoro voice presets with characteristics
 const KOKORO_VOICES = {

@@ -11,8 +11,6 @@ export function VoiceLab({ isOpen, onClose, onVoiceCreated }) {
     const [audioUrl, setAudioUrl] = useState(null)
     const [voiceName, setVoiceName] = useState('')
 
-    // Canvas for visuals
-    const canvasRef = useRef(null)
     const fileInputRef = useRef(null)
 
     // Reset when closed

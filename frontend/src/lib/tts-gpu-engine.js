@@ -770,7 +770,11 @@ export class TTSGPUEngine {
     }
 
     _pitchShift(audio, pitch) {
-        // ... (Reuse existing pitch shift) ...
+        // Guard against invalid pitch values to prevent division by zero
+        if (!pitch || pitch <= 0 || !Number.isFinite(pitch)) {
+            console.warn('[TTS] Invalid pitch value, returning original audio:', pitch)
+            return audio
+        }
         // Simple linear interpolation
         const newLen = Math.floor(audio.length / pitch)
         const out = new Float32Array(newLen)

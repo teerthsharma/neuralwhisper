@@ -379,7 +379,7 @@ impl FormantAnalyzer {
             let mut imag_sum = 0.0f32;
             
             for (k, &coef) in lpc.iter().enumerate() {
-                let angle = -(k + 1) as f32 * omega;
+                let angle = -((k + 1) as f32) * omega;
                 real_sum -= coef * angle.cos();
                 imag_sum -= coef * angle.sin();
             }

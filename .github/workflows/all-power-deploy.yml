@@ -177,17 +177,19 @@ jobs:
           name: production-build
           path: frontend/dist
       
-      - name: Pull Vercel Environment
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: frontend
-      
       - name: Deploy to Vercel
         id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          URL=$(vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }})
+          cd frontend
+          vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+          vercel build --prod --token=$VERCEL_TOKEN
+          URL=$(vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN)
           echo "url=$URL" >> $GITHUB_OUTPUT
           echo "🌐 Deployed to: $URL"
-        working-directory: frontend
       
       - name: Comment Deploy URL
         if: github.event_name == 'pull_request'
